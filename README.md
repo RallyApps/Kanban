@@ -1,7 +1,7 @@
 Rally Kanban
 ============
 
-![Title](https://raw.github.com/osulehria/Kanban/master/screenshots/title-screenshot.png)
+![Title](https://raw.github.com/RallyApps/Kanban/master/screenshots/title-screenshot.png)
 
 ## Overview
 
@@ -17,17 +17,17 @@ In other words, a Kanban board only shows the next few stories that need to be c
 
 If you want to start using the app immediately, create an Custom HTML app on your Rally dashboard. Then copy App.html from the deploy folder into the HTML text area. That's it, it should be ready to use.
 
-Or you can just click [here](https://raw.github.com/osulehria/Kanban/master/deploy/App.html) to find the file and copy it into the custom HTML app.
+Or you can just click [here](https://raw.github.com/RallyApps/Kanban/master/deploy/App.html) to find the file and copy it into the custom HTML app.
 
 ### Using the App
 
 When you first run the app, you can specify the types of columns you want to have by the Group By drop down menu. Some of options you can select are Defect Status, Package, Schedule State, Task Status, and Test Cases Status. You can also specify the work-in-progress (WIP) limit (the number of cards on the column) and what column represents the state of the user story/defect (choose between Defined, In-Progress, Completed, and Accepted). Note if you choose Schedule State, your columns are already represented for you.
 
-![Setup](https://raw.github.com/osulehria/Kanban/master/screenshots/setup-screenshot.png)
+![Setup](https://raw.github.com/RallyApps/Kanban/master/screenshots/setup-screenshot.png)
 
 To switch states of cards, just click on the card header and drag it to the column of your choosing. The column will highlight to show you where the card will go. Don't worry if you made a mistake and need to revert a card back to its original place, all state changes will be made no matter which direction you go in.
 
-![Drag](https://raw.github.com/osulehria/Kanban/master/screenshots/drag-screenshot.png)
+![Drag](https://raw.github.com/RallyApps/Kanban/master/screenshots/drag-screenshot.png)
 
 You can still go into the user story/defect detail page by clicking on the user story/defect ID on the top right of the card.
 
@@ -49,4 +49,4 @@ Available Rakefile tasks are:
 
 ## License
 
-Kanban is released under the MIT license.  See the file [LICENSE](https://raw.github.com/osulehria/Kanban/master/LICENSE) for the full text.
+Kanban is released under the MIT license.  See the file [LICENSE](https://raw.github.com/RallyApps/Kanban/master/LICENSE) for the full text.

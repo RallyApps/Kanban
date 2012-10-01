@@ -1,6 +1,6 @@
 {
-    "server": "http://localhost:7001/slm",
-    "username": "test@test.com",
-    "password": "Password",
-    "project": "admin project"
+    "server": "http://rally1.rallydev.com",
+    "username": "you@domain.com",
+    "password": "S3cr3t",
+    "project": "YourProject"
 }
