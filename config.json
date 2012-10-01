@@ -1,0 +1,16 @@
+{
+    "name": "Kanban",
+    "className": "CustomApp",
+    "sdk": "1.32",
+    "javascript": [
+    	"Kanban.js",
+    	"KanbanCardRenderer.js",
+    	"KanbanColumnRenderer.js",
+    	"KanbanConfig.js",
+    	"KanbanPolicy.js",
+    	"KanbanReport.js"
+    ],
+    "css": [
+        "Kanban.css"
+    ]
+}

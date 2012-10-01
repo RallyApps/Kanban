@@ -1,0 +1,2119 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<!-- Copyright (c) 2011  Rally Software Development Corp.  All rights reserved -->
+<html>
+<head>
+    <title>Kanban Board</title>
+    <meta name="Name" content="App: Kanban Board"/>
+    <meta name="Version" content="2012.01.14"/>
+    <meta name="Vendor" content="Rally Software"/>
+<script type ="text/javascript" src="/apps/1.32/sdk.js"></script>
+  <script type ="text/javascript">
+                KanbanBoard = function(rallyDataSource, configShow) {
+                var FILTER_FIELD = 'Tags.Name';
+            
+                var cardboard;
+                var that = this;
+                var checkBoxes = [];
+                var filterByTagsDropdown, showAgeAfter,
+                        kanbanField, reportKanbanField,
+                        columns, scheduleStatesMap,
+                        hideLastColumnIfReleased, showTaskCompletion, showDefectStatus,
+                        lastState, artifactTypes,
+                        colorByArtifactType, policyCheckBox;
+            
+                that._showThroughputReport = function() {
+                    var config = {reportNumber: 180, reportName: "Throughput Report",
+                        reportKanbanField: reportKanbanField, artifactTypes: artifactTypes};
+                    if (filterByTagsDropdown && filterByTagsDropdown.getValue()) {
+                        config.tags = [filterByTagsDropdown.getValue()];
+                        config.reportName += " filtered by " + filterByTagsDropdown.getDisplayedValue() + " tag";
+                    }
+                    var report = new KanbanReport(config, rallyDataSource);
+                    report.display("cycleTimeReportDiv");
+                };
+            
+                that._showCycleTimeReport = function() {
+                    var config = {reportNumber: 170, reportName: "Cycle Time Report",
+                        reportKanbanField: reportKanbanField, artifactTypes: artifactTypes};
+                    if (filterByTagsDropdown && filterByTagsDropdown.getValue()) {
+                        config.tags = [filterByTagsDropdown.getValue()];
+                        config.reportName += " filtered by " + filterByTagsDropdown.getDisplayedValue() + " tag";
+                    }
+                    var report = new KanbanReport(config, rallyDataSource);
+                    report.display("throughputReportDiv");
+                };
+            
+                that._showNewStoryEditor = function() {
+                    rally.sdk.util.Navigation.popupCreatePage("hierarchicalrequirement", {iteration: 'u', release: 'u'});
+                };
+            
+                that._showHidePolicies = function(checkbox, value) {
+                    if (value.checked) {
+                        that._showPolicies();
+                    } else {
+                        that._hidePolicies();
+                    }
+                };
+            
+                that._showPolicies = function(button, args) {
+                    function resizeIt(textarea) {
+                        var str = textarea.value;
+                        var cols = textarea.cols;
+            
+                        var linecount = 0;
+                        var newLines = str.split("\n");
+            
+                        rally.forEach(newLines, function(line) {
+                            if (Math.ceil(line.length / cols) > 2) {
+                                linecount += Math.ceil(line.length / cols); // take into account long lines
+                            } else {
+                                linecount += 1;
+                            }
+                        });
+            
+                        textarea.rows = linecount;
+                    }
+            
+                    var columnPolicies = dojo.query('.columnPolicy');
+                    rally.forEach(columnPolicies, function(div) {
+                        dojo.removeClass(div, 'hidePolicy');
+                        dojo.style(div, 'display', 'none');
+                        var wipeArgs = {
+                            node: div,
+                            duration: 500
+                        };
+                        rally.forEach(dojo.query('textarea', div), function(textarea) {
+                            resizeIt(textarea);
+                        });
+                        dojo.fx.wipeIn(wipeArgs).play();
+                    });
+                };
+            
+                that._hidePolicies = function(button, args) {
+                    var columnPolicies = dojo.query('.columnPolicy');
+                    rally.forEach(columnPolicies, function(div) {
+                        dojo.style(div, 'height', '');
+                        dojo.style(div, 'display', 'block');
+                        var wipeArgs = {
+                            node: div,
+                            duration: 500
+                        };
+                        dojo.fx.wipeOut(wipeArgs).play();
+                    });
+                };
+            
+                that._createLayout = function(element) {
+                    rally.sdk.ui.AppHeader.setHelpTopic('238');
+                    rally.sdk.ui.AppHeader.showPageTools(true);
+            
+                    rally.sdk.ui.AppHeader.addPageTool({
+                        key: "showCycleTimeReport",
+                        label: "Show Cycle Time Report",
+                        onClick: that._showCycleTimeReport
+                    });
+            
+                    rally.sdk.ui.AppHeader.addPageTool({
+                        key: "showThroughputReport",
+                        label: "Show Throughput Report",
+                        onClick: that._showThroughputReport
+                    });
+            
+                    if (rally.sdk.util.Context.isInsideRally() && window.top !== window.self) {
+                        rally.sdk.ui.AppHeader.addPageTool({
+                            key: "newStory",
+                            label: "Add New Story",
+                            onClick: that._showNewStoryEditor
+                        });
+                        rally.sdk.ui.AppHeader.addPageTool(rally.sdk.ui.PageTools.BuiltIn.OpenInNewWindow);
+                    }
+            
+                    var headerDiv = document.createElement("div");
+                    element.appendChild(headerDiv);
+            
+                    var controlDiv = document.createElement("div");
+                    dojo.addClass(controlDiv, "controlContainer");
+                    headerDiv.appendChild(controlDiv);
+            
+                    var dropdownContainerDiv = document.createElement("div");
+                    dojo.addClass(dropdownContainerDiv, "dropdownContainer");
+                    controlDiv.appendChild(dropdownContainerDiv);
+            
+                    var checkBoxContainerDiv = document.createElement("div");
+                    dojo.addClass(checkBoxContainerDiv, "typeFilterContainer");
+                    controlDiv.appendChild(checkBoxContainerDiv);
+            
+                    var clearDiv = document.createElement("div");
+                    dojo.addClass(clearDiv, "clearFloats");
+                    headerDiv.appendChild(clearDiv);
+            
+                    var filterByTagsSpan = document.createElement("span");
+                    dojo.addClass(filterByTagsSpan, "filterByTagsDropdown");
+                    dropdownContainerDiv.appendChild(filterByTagsSpan);
+            
+                    function populateFilterByDropdown(results) {
+                        rally.forEach(results.tags, function(tag) {
+                            data.push({label: tag.Name, value: tag.ObjectID});
+                        });
+                        filterByTagsDropdown = new rally.sdk.ui.basic.Dropdown({label: "Filter by: ",
+                            items : data,
+                            rememberSelection:false,
+                            defaultValue: ""});
+                        filterByTagsDropdown.display(filterByTagsSpan);
+                        filterByTagsDropdown.addEventListener("onChange", that._updateBoardWithFilter);
+                    }
+            
+                    var data = [
+                        { label: "", value: ""}
+                    ];
+                    rallyDataSource.findAll(
+                            {key    : 'tags',
+                                order:   'Name',
+                                type   : 'Tags',
+                                fetch  : 'Name,ObjectID',
+                                query  : '(Archived = False)' }, populateFilterByDropdown);
+            
+                    var showSpan = document.createElement("span");
+                    showSpan.appendChild(document.createTextNode("Show:"));
+                    checkBoxContainerDiv.appendChild(showSpan);
+            
+                    var userStoriesSpan = document.createElement("span");
+                    userStoriesSpan.id = "userStories";
+                    checkBoxContainerDiv.appendChild(userStoriesSpan);
+            
+                    var userStoriesCheckBox = new rally.sdk.ui.basic.CheckBox({
+                        showLabel: true,
+                        label: "User Stories",
+                        labelPosition: "after",
+                        value: "HierarchicalRequirement",
+                        checked: true
+                    });
+                    checkBoxes.push(userStoriesCheckBox);
+                    userStoriesCheckBox.display(userStoriesSpan);
+            
+                    var defectsSpan = document.createElement("span");
+                    defectsSpan.id = "defects";
+                    checkBoxContainerDiv.appendChild(defectsSpan);
+            
+                    var defectsCheckBox = new rally.sdk.ui.basic.CheckBox({
+                        showLabel: true,
+                        label: "Defects",
+                        labelPosition: "after",
+                        value: "Defect",
+                        checked: true
+                    });
+                    checkBoxes.push(defectsCheckBox);
+                    defectsCheckBox.display(defectsSpan);
+            
+                    var policySpan = document.createElement("span");
+                    policySpan.id = "policy-";
+                    dojo.addClass(policySpan, "policySpan");
+                    checkBoxContainerDiv.appendChild(policySpan);
+            
+                    policyCheckBox = new rally.sdk.ui.basic.CheckBox({
+                        showLabel: true,
+                        label: "Policies",
+                        labelPosition: "after",
+                        value: "policy",
+                        checked: false,
+                        rememberChecked: true
+                    });
+                    policyCheckBox.display(policySpan);
+                    policyCheckBox.addEventListener("onChange", that._showHidePolicies);
+            
+                    var kanbanBoard = document.createElement("div");
+                    kanbanBoard.id = "kanbanBoard";
+                    dojo.addClass(kanbanBoard, "kanbanBoard");
+                    element.appendChild(kanbanBoard);
+            
+                    //Wire up events
+                    dojo.forEach(checkBoxes, function(checkBox) {
+                        checkBox.addEventListener("onChange", that._redisplayBoard);
+                    });
+                };
+            
+                that._getColumn = function(field) {
+                    var showPolicy = policyCheckBox.getChecked();
+                    var policyDesc = field.policy || "";
+                    return {wipLimit:field.wip, policy:policyDesc, showPolicy:showPolicy};
+                };
+            
+                that._getAndStorePrefData = function(callback) {
+                    function populateConfigForm(results) {
+                        var parsedResults = rally.sdk.data.Preferences.parse(results);
+                        var kanbanInfo;
+                        if (parsedResults.project.Kanban) {
+                            kanbanInfo = parsedResults.project.Kanban.WipSettings;
+                        } else if (parsedResults.workspace.Kanban) {
+                            kanbanInfo = parsedResults.workspace.Kanban.WipSettings;
+                        }
+            
+                        if (kanbanInfo) {
+                            kanbanField = kanbanInfo.kanbanField;
+                            reportKanbanField = kanbanInfo.reportKanbanField;
+                            hideLastColumnIfReleased = kanbanInfo.hideLastColumnIfReleased;
+                            showTaskCompletion = kanbanInfo.showTaskCompletion;
+                            showDefectStatus = kanbanInfo.showDefectStatus;
+                            colorByArtifactType = kanbanInfo.colorByArtifactType;
+                            if (kanbanInfo.showAge) {
+                                showAgeAfter = kanbanInfo.showAgeAfter;
+                            } else {
+                                showAgeAfter = null;
+                            }
+                            columns = {};
+                            scheduleStatesMap = {};
+                            rally.forEach(kanbanInfo.fieldInfos, function(fieldInfo, key) {
+                                if (fieldInfo.displayField) {
+                                    columns[key] = that._getColumn(fieldInfo);
+                                    scheduleStatesMap[key] = fieldInfo.state;
+                                    lastState = key;
+                                }
+                            });
+            
+                            callback();
+                        }
+                        else {
+                            //no prefs found fire up dialog
+                            configShow();
+                        }
+                    }
+            
+                    rallyDataSource.preferences.getAppPreferences(populateConfigForm);
+                };
+            
+                that._onBeforeItemUpdated = function(c, args) {
+                    if (args.type === "move") {
+            
+                        args.fieldsToUpdate.Ready = false;
+            
+                        if (scheduleStatesMap[args.fieldsToUpdate[args.attribute]]) {
+                            args.fieldsToUpdate.ScheduleState = scheduleStatesMap[args.fieldsToUpdate[args.attribute]];
+                        }
+                    }
+                };
+            
+                that._updateBoardWithFilter = function(dropdown) {
+                    if (cardboard) {
+                        cardboard.filterBoard({field: FILTER_FIELD, value: dropdown.getDisplayedValue()});
+                    } else {
+                        that._redisplayBoard();
+                    }
+                };
+            
+                that._redisplayBoard = function() {
+                    function displayBoard() {
+                        artifactTypes = [];
+                        var cardboardConfig = {
+                            types           : [],
+                            attribute       : kanbanField,
+                            sortAscending   : true,
+                            order           : "Rank",
+                            cardRenderer    : KanbanCardRenderer,
+                            cardOptions     : {
+                                showTaskCompletion: showTaskCompletion,
+                                showDefectStatus: showDefectStatus,
+                                showAgeAfter: showAgeAfter,
+                                colorByArtifactType: colorByArtifactType
+                            },
+                            columnRenderer  : KanbanColumnRenderer,
+                            columns         : columns,
+                            fetch           : "Name,FormattedID,Owner,ObjectID,Rank,Ready,Blocked,LastUpdateDate,Tags,State"
+                        };
+            
+            
+                        if (showTaskCompletion) {
+                            cardboardConfig.fetch += ",Tasks";
+                        }
+            
+                        if (showDefectStatus) {
+                            cardboardConfig.fetch += ",Defects";
+                        }
+            
+                        if (hideLastColumnIfReleased) {
+                            cardboardConfig.query = new rally.sdk.util.Query("Release = null").or(kanbanField + " != " + '"' + lastState + '"');
+                        }
+            
+                        if (filterByTagsDropdown && filterByTagsDropdown.getDisplayedValue()) {
+                            cardboardConfig.cardOptions.filterBy = {field: FILTER_FIELD, value: filterByTagsDropdown.getDisplayedValue()};
+                        }
+                        //Build types based on checkbox selections
+            
+                        dojo.forEach(checkBoxes, function(checkBox) {
+                            if (checkBox.getChecked()) {
+                                cardboardConfig.types.push(checkBox.getValue());
+                            }
+                        });
+            
+                        if (cardboard) {
+                            cardboard.destroy();
+                        }
+                        artifactTypes = cardboardConfig.types;
+            
+                        cardboard = new rally.sdk.ui.CardBoard(cardboardConfig, rallyDataSource);
+            
+                        cardboard.addEventListener("preUpdate", that._onBeforeItemUpdated);
+                        cardboard.display("kanbanBoard");
+                    }
+                    that._getAndStorePrefData(displayBoard);
+                };
+            
+                that.display = function(element) {
+            
+                    //Build app layout
+                    this._createLayout(element);
+            
+                    //Redisplay the board
+                    this._redisplayBoard();
+                };
+            };            KanbanCardRenderer = function(column, item, options) {
+                rally.sdk.ui.cardboard.BasicCardRenderer.call(this, column, item, options);
+                var that = this;
+                var cardContent,card,cardMenu;
+                this.getItem = function() {
+                    return dojo.clone(item);
+                };
+                this.selectCard = function() {
+                    var expand = dojo.animateProperty({
+                        node : cardMenu,
+                        properties : {
+                            height : {end : dojo.style(cardMenu, "lineHeight")},
+                            rate: 7
+                        }
+                    });
+                    expand.play();
+                    dojo.addClass(cardMenu, "expanded");
+                    KanbanCardRenderer.SelectedCard = that;
+                };
+            
+                this.unselectCard = function() {
+                    var shrink = dojo.animateProperty({
+                        node : cardMenu,
+                        properties : {
+                            height : {end : 0},
+                            rate: 7
+                        }
+                    });
+                    shrink.play();
+                    dojo.removeClass(cardMenu, "expanded");
+                    KanbanCardRenderer.SelectedCard = null;
+                };
+            
+                this._contentClicked = function() {
+                    that.fireEvent(that.getValidEvents().onContentClick, {
+                        item: item
+                    });
+                };
+            
+            
+                this._headerMouseOver = function(event) {
+                    var headerElement = event.srcElement;
+                    var timer;
+                    var delay = 3000;
+                    var tooltip;
+                    var link;
+            
+                    function removeTooltip() {
+                        if (tooltip && tooltip.hide) {
+                            dojo.disconnect(link);
+                            tooltip.hide();
+                        }
+                        clearTimeout(timer);
+                    }
+            
+            
+                    function showTooltip() {
+                        var tooltipDiv = document.createElement("div");
+                        headerElement.appendChild(tooltipDiv);
+                        // attach to the right of the formatted id
+                        tooltip = rally.sdk.ui.basic.Tooltip.show(headerElement.parentNode.firstChild, "Drag to move story, click to show toolbar", "before", 3000);
+            
+                    }
+            
+                    link = dojo.connect(headerElement, "onmouseout", removeTooltip);
+                    timer = setTimeout(showTooltip, delay);
+                };
+            
+                this._headerClicked = function() {
+                    var previousSelection = KanbanCardRenderer.SelectedCard;
+                    if (KanbanCardRenderer.SelectedCard) {
+                        KanbanCardRenderer.SelectedCard.unselectCard();
+                    }
+            
+                    if (previousSelection !== that) {
+                        that.selectCard();
+                    }
+            
+                    that.fireEvent(that.getValidEvents().onHeaderClick, {
+                        item: item
+                    });
+                };
+            
+                this.getValidEvents = function() {
+                    return {
+                        onContentClick:"onContentClick",
+                        onHeaderClick: "onHeaderClick",
+                        onItemUpdate: "onItemUpdate"
+                    };
+                };
+            
+                this.applyFilter = function() {
+            
+                    function applyFilterClass() {
+                        dojo.removeClass(card, 'filterByFade');
+                        dojo.addClass(card, 'filterByShow');
+                    }
+            
+                    if (options.filterBy.value && options.filterBy.value.length > 0) { //if the filter value is not empty string
+                        dojo.removeClass(card, 'filterByShow');
+                        dojo.addClass(card, 'filterByFade');
+            
+                        var filterFieldSplit = options.filterBy.field.toString().split('.');
+                        var filterField = filterFieldSplit[0];
+                        var filterAttr = filterFieldSplit[filterFieldSplit.length - 1];
+            
+                        if (item[filterField] === options.filterBy.value) { // field is string or number
+                            applyFilterClass();
+                        } else if (filterField !== filterAttr) {
+                            if (item[filterField] && item[filterField][filterAttr] === options.filterBy.value) { // field is an object
+                                applyFilterClass();
+                            } else { // field is a collection
+                                rally.forEach(item[filterField], function(field) {
+                                    if (field[filterAttr] === options.filterBy.value) {
+                                        applyFilterClass();
+                                    }
+                                });
+                            }
+                        }
+                    } else { //if the filter value is empty string, show card
+                        applyFilterClass();
+                    }
+                };
+            
+                this.applyArtifactTypeStyle = function() {
+                    dojo.addClass(card, rally.sdk.util.Ref.getTypeFromRef(item._ref));
+                };
+            
+                this._getColumnAgeDays = function() {
+                    var daysOld = 0;
+            
+                    function getLastStateChange() {
+                        var revisions = item.RevisionHistory.Revisions;
+                        var lastStateChangeDate = "";
+            
+                        rally.forEach(revisions, function(revision) {
+                            if (lastStateChangeDate.length === 0) {
+                                var attr = options.attribute.toUpperCase();
+            
+                                if (revision.Description.indexOf(attr + " changed from") !== -1) {
+                                    lastStateChangeDate = revision.CreationDate;
+                                }
+                                if (revision.Description.indexOf(attr + " added") !== -1) {
+                                    lastStateChangeDate = revision.CreationDate;
+                                }
+                            }
+                        });
+                        return lastStateChangeDate || item.CreationDate;
+                    }
+            
+                    var lastStateDate = getLastStateChange();
+            
+                    var lastUpdateDate = rally.sdk.util.DateTime.fromIsoString(lastStateDate);
+                    return rally.sdk.util.DateTime.getDifference(new Date(), lastUpdateDate, "day");
+                };
+            
+                this.updateCard = function(node) {
+                    card = node.firstChild;
+                    that._populateCard();
+                };
+            
+                this._populateCard = function() {
+                    var idDiv = dojo.query('.leftCardHeader', card)[0];
+                    var link = new rally.sdk.ui.basic.Link({item: item});
+                    dojo.empty(idDiv);
+                    link.display(idDiv);
+            
+                    var ownerImg = dojo.query('.cardOwner', card)[0];
+                    var ownerName = dojo.query('.cardOwnerName', card)[0];
+                    dojo.empty(ownerName);
+            
+                    if (item.Owner) {
+                        ownerImg.setAttribute("src", rally.sdk.util.Ref.getUserImage(item.Owner._ref));
+                        ownerName.appendChild(document.createTextNode(item.Owner._refObjectName));
+                    }
+                    else {
+                        ownerImg.setAttribute("src", rally.sdk.loader.launcherPath + "/../images/profile-mark-18.png");
+                        ownerName.appendChild(document.createTextNode("No Owner"));
+                    }
+            
+                    var cardName = dojo.query('.cardName', card)[0];
+                    cardName.innerHTML = item.Name;
+            
+                    var tasksDiv = dojo.query('.tasks', card);
+            
+                    if (tasksDiv.length > 0) {
+                        tasksDiv = tasksDiv[0];
+                        dojo.empty(tasksDiv);
+                        var completedTasks = 0;
+                        rally.forEach(item.Tasks, function(task) {
+                            if (task.State === "Completed") {
+                                completedTasks++;
+                            }
+                        });
+            
+                        if (completedTasks === 0) {
+                            dojo.addClass(tasksDiv, "none");
+                        } else if (completedTasks < item.Tasks.length) {
+                            dojo.addClass(tasksDiv, "some");
+                        } else {
+                            dojo.addClass(tasksDiv, "all");
+                        }
+            
+                        var tasksLink = new rally.sdk.ui.basic.Link({
+                            item: item,
+                            text: completedTasks + " of " +
+                                    item.Tasks.length + " tasks completed",
+                            subPage: "tasks"
+                        });
+                        tasksLink.display(tasksDiv);
+                    }
+            
+                    var defectsDiv = dojo.query('.defects', card);
+            
+                    if (defectsDiv.length > 0) {
+                        defectsDiv = defectsDiv[0];
+                        dojo.empty(defectsDiv);
+                        var closedDefects = 0;
+                        rally.forEach(item.Defects, function(defect) {
+                            if (defect.State === "Closed") {
+                                closedDefects++;
+                            }
+                        });
+            
+                        if (closedDefects === 0) {
+                            dojo.addClass(defectsDiv, "none");
+                        } else if (closedDefects < item.Defects.length) {
+                            dojo.addClass(defectsDiv, "some");
+                        } else {
+                            dojo.addClass(defectsDiv, "all");
+                        }
+            
+                        var defectsLink = new rally.sdk.ui.basic.Link({
+                            item: item,
+                            text: closedDefects + " of " +
+                                    item.Defects.length + " defects closed",
+                            subPage: "defects"
+                        });
+                        defectsLink.display(defectsDiv);
+                    }
+            
+                    if (options && options.filterBy) {
+                        that.applyFilter();
+                    }
+            
+                    if (options && options.colorByArtifactType) {
+                        that.applyArtifactTypeStyle();
+                    }
+            
+                    if (options && options.showAgeAfter && options.attribute && item.RevisionHistory) {
+                        var ageDiv = dojo.query('.age', card);
+            
+                        var daysOld = that._getColumnAgeDays();
+            
+                        if (ageDiv.length > 0 && daysOld > options.showAgeAfter) {
+                            ageDiv = ageDiv[0];
+                            dojo.empty(ageDiv);
+                            dojo.addClass(ageDiv, 'agedCard');
+            
+                            var ageDisplay = (daysOld === 1) ? daysOld + " day" : daysOld + " days";
+                            var ageTextNode = document.createTextNode(ageDisplay + " in this column");
+                            ageDiv.appendChild(ageTextNode);
+                        }
+                    }
+                };
+            
+                this.renderCard = function() {
+                    card = document.createElement("div");
+                    dojo.addClass(card, "card");
+            
+                    var header = document.createElement("div");
+                    dojo.addClass(header, "cardHeader");
+                    dojo.addClass(header, "dojoDndHandle");
+                    card.appendChild(header);
+                    dojo.connect(header, "onclick", that._headerClicked);
+                    dojo.connect(header, "onmouseover", that._headerMouseOver);
+            
+                    var idDiv = document.createElement("div");
+                    dojo.addClass(idDiv, "leftCardHeader");
+                    header.appendChild(idDiv);
+                    var ownerImg = document.createElement("img");
+                    dojo.addClass(ownerImg, "cardOwner");
+            
+                    var ownerName = document.createElement("div");
+                    dojo.addClass(ownerName, "cardOwnerName");
+            
+                    header.appendChild(ownerImg);
+                    header.appendChild(ownerName);
+            
+                    cardContent = document.createElement("div");
+                    dojo.addClass(cardContent, "cardContent");
+                    card.appendChild(cardContent);
+            
+                    var cardName = document.createElement("div");
+                    dojo.addClass(cardName, "cardName");
+                    cardContent.appendChild(cardName);
+            
+                    var statusDiv = document.createElement("div");
+                    dojo.addClass(statusDiv, 'status');
+                    if (options && options.showTaskCompletion && item.Tasks && item.Tasks.length) {
+                        var tasksDiv = document.createElement("div");
+                        dojo.addClass(tasksDiv, "tasks");
+                        statusDiv.appendChild(tasksDiv);
+                    }
+            
+                    if (options && options.showDefectStatus && item.Defects && item.Defects.length) {
+                        var defectsDiv = document.createElement("div");
+                        dojo.addClass(defectsDiv, "defects");
+                        statusDiv.appendChild(defectsDiv);
+                    }
+            
+                    if (statusDiv.childNodes.length) {
+                        cardContent.appendChild(statusDiv);
+                    }
+            
+                    if (options && options.showAgeAfter) {
+                        var ageDiv = document.createElement('div');
+                        dojo.addClass(ageDiv, "age");
+                        cardContent.appendChild(ageDiv);
+                    }
+            
+                    that._populateCard(card);
+            
+                    cardMenu = document.createElement("div");
+                    dojo.addClass(cardMenu, "cardMenu");
+                    card.appendChild(cardMenu);
+                    that._addReadyDivToMenu();
+                    that._addBlockedDivToMenu();
+                    that._addEditLinkToMenu();
+                    dojo.connect(cardContent, "onclick", that._contentClicked);
+            
+                    return card;
+                };
+            
+                this.renderDndCard = function() {
+                    var avatarCard = that.renderCard();
+                    dojo.addClass(avatarCard, "avatar");
+                    return avatarCard;
+                };
+            
+                this.updateDisplay = function() {
+                    if (item.Ready) {
+                        dojo.addClass(card, "ready");
+                    }
+                    else {
+                        dojo.removeClass(card, "ready");
+                    }
+                    if (item.Blocked) {
+                        dojo.addClass(card, "blocked");
+                    }
+                    else {
+                        dojo.removeClass(card, "blocked");
+                    }
+                };
+            
+                this._addReadyDivToMenu = function() {
+                    if (item.hasOwnProperty("Ready")) {
+                        var readyIndicator = document.createElement("div");
+                        dojo.addClass(readyIndicator, "readyIndicator");
+                        readyIndicator.onclick = function(e) {
+                            item.Ready = !item.Ready;
+                            that.updateDisplay();
+                            that.updateItem({_ref:item._ref,Ready:item.Ready}, function() {
+                            });
+                        };
+                        cardMenu.appendChild(readyIndicator);
+                    }
+                    that.updateDisplay();
+                };
+                this._addBlockedDivToMenu = function() {
+                    var blockedIndicator = document.createElement("div");
+                    dojo.addClass(blockedIndicator, "blockedIndicator");
+                    blockedIndicator.onclick = function(e) {
+                        item.Blocked = !item.Blocked;
+                        that.updateDisplay();
+                        that.updateItem({_ref:item._ref,Blocked:item.Blocked}, function() {
+                        });
+                    };
+                    cardMenu.appendChild(blockedIndicator);
+                    that.updateDisplay();
+                };
+            
+                this._addEditLinkToMenu = function() {
+                    var editLinkContainer = document.createElement("div");
+                    dojo.addClass(editLinkContainer, "editLinkContainer");
+                    var editLink = new rally.sdk.ui.basic.EditLink({item: item});
+                    editLink.display(editLinkContainer);
+                    cardMenu.appendChild(editLinkContainer);
+                };
+            };
+            var KanbanColumnRenderer = function(board, value, options) {
+                rally.sdk.ui.cardboard.BasicColumnRenderer.call(this, board, value, options);
+                var that = this;
+                var dndContainer;
+                var cards = 0;
+                var columnDiv;
+                var capacity = Infinity;
+                var resourcesDisplay;
+                var saveLinkHandler, cancelLinkHandler;
+                var columnHeader, columnPolicy, policyHeaderDiv, policySubheaderDiv, policyTextboxDiv, policyTextArea, policyTextAreaExtension, editPolicyDiv;
+                var editPolicyElements;
+                var editPolicyHandlers = [];
+            
+                var kanbanPolicy = new KanbanPolicy(board.getRallyDataSource(), function(updatedVal) {
+                    if (updatedVal !== null) {
+                        options.policy = updatedVal;
+                    }
+                    that.updateColumn();
+                });
+            
+                this.updateColumn = function() {
+                    if (saveLinkHandler) {
+                        dojo.disconnect(saveLinkHandler);
+                    }
+                    if (cancelLinkHandler) {
+                        dojo.disconnect(cancelLinkHandler);
+                    }
+                    that._populateColumn();
+                };
+            
+                this.render = function() {
+            
+                    columnDiv = document.createElement('div');
+                    dojo.addClass(columnDiv, 'column');
+            
+                    columnHeader = document.createElement('div');
+                    dojo.addClass(columnHeader, 'columnHeader');
+            
+                    if (options && options.wipLimit) {
+                        capacity = options.wipLimit;
+                        resourcesDisplay = document.createElement('div');
+                        dojo.addClass(resourcesDisplay, 'capacityDisplay');
+                        columnHeader.appendChild(resourcesDisplay);
+                    }
+                    columnDiv.appendChild(columnHeader);
+            
+                    columnPolicy = document.createElement('div');
+                    dojo.addClass(columnPolicy, 'columnPolicy hidePolicy');
+                    columnDiv.appendChild(columnPolicy);
+            
+                    policyHeaderDiv = document.createElement('div');
+                    dojo.addClass(policyHeaderDiv, 'policyHeaderDiv');
+                    columnPolicy.appendChild(policyHeaderDiv);
+            
+                    policySubheaderDiv = document.createElement('div');
+                    dojo.addClass(policySubheaderDiv, 'policySubheaderDiv');
+                    columnPolicy.appendChild(policySubheaderDiv);
+            
+                    policyTextboxDiv = document.createElement('div');
+                    dojo.addClass(policyTextboxDiv, 'policyTextboxDiv');
+                    policyTextArea = dojo.create('textarea');
+                    policyTextboxDiv.appendChild(policyTextArea);
+                    policyTextAreaExtension = new dijit.form.Textarea({ maxLength: 256 }, policyTextArea);
+                    columnPolicy.appendChild(policyTextboxDiv);
+            
+                    editPolicyDiv = document.createElement('div');
+                    dojo.addClass(editPolicyDiv, 'editPolicyDiv');
+                    columnPolicy.appendChild(editPolicyDiv);
+            
+                    dndContainer = document.createElement('div');
+                    dojo.addClass(dndContainer, 'columnContent');
+                    columnDiv.appendChild(dndContainer);
+                    this._populateColumn();
+            
+                    return columnDiv;
+                };
+            
+                this._populateColumn = function() {
+                    columnHeader.innerHTML = options.displayValue || value || "-- No Entry --";
+            
+                    if (options && options.wipLimit) {
+                        setCapacityText();
+                        columnHeader.appendChild(resourcesDisplay);
+                    }
+            
+                    policyHeaderDiv.innerHTML = 'Exit Policy';
+                    policySubheaderDiv.innerHTML = 'What needs to be done before an item is ready to leave this column?';
+            
+                    var textArea = dojo.query('.policyTextboxDiv textarea', columnDiv)[0];
+                    dojo.style(textArea, 'border', '1px solid transparent');
+                    dojo.attr(textArea, 'readOnly', true);
+                    if (options && options.hasOwnProperty('policy')) {
+                        if (options.policy === "") {
+                            policyTextAreaExtension.setValue(options.policy + '\n');
+                        } else {
+                            policyTextAreaExtension.setValue(options.policy);
+                        }
+                    }
+            
+                    if (options && options.showPolicy) {
+                        dojo.removeClass(columnPolicy, 'hidePolicy');
+                    }
+            
+                    editPolicyElements = [columnPolicy, policyHeaderDiv, policySubheaderDiv, textArea];
+                    rally.forEach(editPolicyElements, dojo.hitch(this, function(element) {
+                        editPolicyHandlers.push(dojo.connect(element, 'onmouseenter', this, this._editCursor));
+                    }));
+                };
+            
+                this._editCursor = function(evt) {
+                    var srcElement = evt.srcElement || evt.target;
+            
+                    if (dojo.isIE <= 8) {
+                        dojo.style(srcElement, 'cursor', 'pointer');
+                    } else {
+                        dojo.style(srcElement, 'cursor', 'url("/apps/images/editIcon.cur"), url("/apps/images/editIcon.png"), pointer');
+                    }
+                    editPolicyHandlers.push(dojo.connect(srcElement, 'onclick', this, this._editPolicy));
+                };
+            
+                this._savePolicy = function() {
+                    dojo.empty(editPolicyDiv);
+                    dojo.style(policySubheaderDiv, 'display', 'none');
+                    dojo.removeClass(editPolicyDiv, 'editPolicyDivExtraPadding');
+                    kanbanPolicy.savePolicy(value, policyTextAreaExtension.getValue());
+                };
+            
+                this._cancelPolicy = function(evt) {
+                    evt.preventDefault();
+                    dojo.empty(editPolicyDiv);
+                    dojo.style(policySubheaderDiv, 'display', 'none');
+                    dojo.removeClass(editPolicyDiv, 'editPolicyDivExtraPadding');
+                    that.updateColumn();
+                };
+            
+                this._formatTextArea = function() {
+                    var textarea = dojo.query('.policyTextboxDiv textarea', columnDiv)[0];
+            
+                    rally.forEach(editPolicyHandlers, function(handler) {
+                        dojo.disconnect(handler);
+                    });
+                    editPolicyHandlers = [];
+            
+                    rally.forEach(editPolicyElements, function(element) {
+                        element.style.cursor = 'default';
+                    });
+                    editPolicyElements = null;
+            
+                    dojo.style(textarea, 'border', '1px solid #c6c6c6');
+                    dojo.attr(textarea, 'readOnly', false);
+            
+                    dojo.addClass(editPolicyDiv, 'editPolicyDivExtraPadding');
+                    policyTextAreaExtension.focus();
+                };
+            
+                this._showPolicyInstructions = function() {
+                    dojo.style(policySubheaderDiv, 'display', 'block');
+                };
+            
+                this._createSaveButton = function(element) {
+                    var saveButtonSpan = document.createElement('span');
+                    dojo.addClass(saveButtonSpan, 'saveButtonSpan');
+                    element.appendChild(saveButtonSpan);
+            
+                    var saveButton = new rally.sdk.ui.basic.Button({text: 'Save'});
+                    saveButton.addEventListener('onClick', dojo.hitch(this, this._savePolicy));
+                    saveButton.display(saveButtonSpan);
+                };
+            
+                this._createCancelLink = function(element) {
+                    var cancelLink = dojo.create('a', {href: '#', innerHTML: 'Cancel'}, element);
+                    cancelLinkHandler = dojo.connect(cancelLink, 'onclick', this, this._cancelPolicy);
+                };
+            
+                this._editPolicy = function() {
+                    this._formatTextArea();
+                    this._showPolicyInstructions();
+            
+                    dojo.empty(editPolicyDiv);
+                    this._createSaveButton(editPolicyDiv);
+                    this._createCancelLink(editPolicyDiv);
+                };
+            
+                function setCapacityText() {
+                    if (options && options.wipLimit) {
+                        dojo.empty(resourcesDisplay);
+                        resourcesDisplay.innerHTML = getCapacityText(cards, capacity);
+                        if (capacity >= cards) {
+                            dojo.removeClass(columnDiv, 'overCapacity');
+                        } else {
+                            dojo.addClass(columnDiv, 'overCapacity');
+                        }
+                    }
+                }
+            
+                function getCapacityText(cards, wip) {
+                    if (wip === Infinity || wip === "Infinity") {
+                        return " (" + cards + '/<span class="infinitySymbol">&#8734;</span>)';
+                    }
+                    else {
+                        return " (" + cards + "/" + wip + ")";
+                    }
+                }
+            
+                this.addNoDropClass = function(nodes) {
+                    if (capacity === Infinity) {
+                        return false;
+                    }
+                    return capacity <= cards;
+                };
+            
+                this.cardRemoved = function(card) {
+                    cards--;
+                    setCapacityText();
+                };
+            
+                this.cardAdded = function(card) {
+                    cards++;
+                    setCapacityText();
+                };
+            
+                this.getDndContainer = function() {
+                    return dndContainer;
+                };
+            
+                this.getColumnNode = function() {
+                    return columnDiv;
+                };
+            
+                this.clear = function() {
+                    dojo.empty(that.getDndContainer());
+                    cards = 0;
+                    setCapacityText();
+                };
+            };            /**
+             Copyright (c) 2011  Rally Software Development Corp.  All rights reserved
+             */
+            
+            KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
+                rally.sdk.ComponentBase.call(this);
+            
+                this.getValidEvents = function() {
+                    return {onHide:"onHide"};
+                };
+            
+                var that = this;
+                var projectPrefRef, workspacePrefRef, currentPrefs = {};
+                var stateDropdown, dialog;
+                var allAttributes = {}, scheduleStateValues = {};
+                var controls = [], rows = [], accessors = [];
+                var hideCardsCheckBox, showTasksCheckBox, showDefectsCheckBox, showAgeCheckBox, showAgeTextBox, colorByArtifactTypeCheckBox;
+            
+                var notMappedKey = "NotMapped";
+                var notMappedVal = "-- Not Mapped --";
+            
+                //show list of kanbanable states
+                that.display = function() {
+                    that._displayKanbanFieldDropdown(this._displayColumnPreferences);
+                };
+            
+                that.show = function() {
+                    if (dialog) {
+                        dialog.show();
+                    }
+                };
+            
+                that.hide = function() {
+                    if (dialog) {
+                        dialog.hide();
+                    }
+                };
+            
+                that.displayDialog = function() {
+                    if (dialog) {
+                        return;
+                    }
+                    function createDialog(names) {
+                        var content = dojo.byId("configPanel");
+                        var title;
+                        dojo.byId("configPanel").style.visibility = "visible";
+                        if (names.projectName) {
+                            title = "Configure Settings for " + names.projectName + " Project";
+                        }
+                        else if (names.workspaceName) {
+                            title = "Configure Settings for Current Project";
+                        }
+                        else {
+                            title = "Configure Default Settings";
+                        }
+                        dialog = new rally.sdk.ui.basic.Dialog({
+                            id : new Date().toString(),
+                            title: title,
+                            width: 400,
+                            height: 350,
+                            draggable:false,
+                            closable:false,
+                            content: content
+                        });
+            
+                        dialog.addEventListener("onHide", function() {
+                            that.fireEvent(that.getValidEvents().onHide, {});
+                        });
+                        dialog.display();
+                        that.displaySaveCancelFeatures();
+                        that._displayHelpDialog();
+                    }
+            
+                    that._retrievePreferences(createDialog);
+                };
+            
+                that.displaySaveCancelFeatures = function() {
+                    var buttonContainer = dojo.query(".buttonContainer")[0];
+                    dojo.addClass(buttonContainer, "saveCancelButtons");
+            
+                    var saveButton = new rally.sdk.ui.basic.Button({text:"Save", value:"Save"});
+                    saveButton.display(buttonContainer, function() {
+                        that._storeValues(that._saveComplete);
+                    });
+            
+                    var cancelLink = "<a href='' id='cancelLink'>Cancel</a>";
+                    dojo.place(cancelLink, buttonContainer);
+                    dojo.connect(dojo.byId('cancelLink'), "onclick", function(event) {
+                        dialog.hide();
+                        that._setValues();
+                        dojo.stopEvent(event);
+                    });
+                };
+            
+                that._alterWipTextBox = function(textbox, args) {
+                    if (!args.value && args.value !== 0) {
+                        textbox.setValue("");
+                    }
+                    else if (!isNaN(args.value)) {
+                        textbox.setValue(Math.max(args.value, 0).toString());
+                    }
+                    else {
+                        textbox.setValue("");
+                    }
+                };
+            
+                that._alterAgeTextBox = function(textbox, args) {
+                    if (!args.value || isNaN(args.value) || args.value < 1) {
+                        textbox.setValue(3);
+                    }
+                };
+            
+                that._addControlToRow = function(row, divId, control, containerCss) {
+                    var td = document.createElement("td");
+                    var div = document.createElement("div");
+                    if (containerCss) {
+                        dojo.addClass(div, containerCss);
+                    }
+                    td.appendChild(div);
+                    div.id = divId;
+                    control.display(div);
+                    controls.push(control);
+                    row.appendChild(td);
+                };
+            
+                that._createAllowedValueTableRow = function(allowedValue, fieldName) {
+                    var stringValue = allowedValue.StringValue;
+                    var row = document.createElement("tr");
+            
+            
+                    var columnNameContainer = document.createElement("td");
+                    columnNameContainer.innerHTML = stringValue || "-- No Entry --";
+                    row.appendChild(columnNameContainer);
+            
+            
+                    var checkbox = new rally.sdk.ui.basic.Checkbox({
+                        rememberChecked:false,
+                        checked:true
+                    });
+            
+                    that._addControlToRow(row, stringValue + "-checkBox-" + rows.length, checkbox, "configCheckBox");
+            
+                    var textBox = new rally.sdk.ui.basic.TextBox(
+                            {   value:'',
+                                rememberValue:false
+                            });
+            
+                    textBox.addEventListener("onChange", that._alterWipTextBox);
+                    that._addControlToRow(row, stringValue + "-textBox-" + rows.length, textBox, "wipTextBoxContainer");
+            
+                    var stateDropdownConfig = {
+                        defaultValue: notMappedKey,
+                        rememberSelection:false,
+                        width:115
+                    };
+                    var mappingDropdown = new rally.sdk.ui.basic.Dropdown(stateDropdownConfig);
+            
+                    if (fieldName === "Schedule State") {
+                        var notMappedScheduleStateVals = {};
+                        notMappedScheduleStateVals[notMappedKey] = notMappedVal;
+                        mappingDropdown.setItems(notMappedScheduleStateVals);
+                    }
+                    else {
+                        mappingDropdown.setItems(scheduleStateValues);
+                    }
+            
+                    that._addControlToRow(row, stringValue + "-dropdown-" + rows.length, mappingDropdown);
+            
+                    var accessor = {
+                        field:stringValue,
+                        get: function() {
+                            var result = {};
+                            var wipText = textBox.getValue();
+                            result.wip = wipText.length === 0 ? Infinity : wipText;
+                            //this turns undefined into false.
+                            result.displayField = !!checkbox.getChecked();
+                            var scheduleStateValue = mappingDropdown.getValue();
+                            if (scheduleStateValue !== notMappedKey) {
+                                result.state = scheduleStateValue;
+                            }
+                            return result;
+                        },
+                        set:function(object) {
+                            if (object.state) {
+                                mappingDropdown.setValue(object.state);
+                            } else {
+                                mappingDropdown.setValue(notMappedVal);
+                            }
+            
+                            var wipText = (object.wip === Infinity || object.wip === "Infinity"  ) ? "" : object.wip;
+                            textBox.setValue(wipText);
+                            checkbox.setChecked(object.displayField);
+                        }
+                    };
+                    accessors.push(accessor);
+                    return row;
+                };
+            
+                that._destroyPreviousControls = function() {
+                    dojo.forEach(controls, function(control) {
+                        if (control && control.destroy) {
+                            control.destroy();
+                        }
+                    });
+                    controls = [];
+                    dojo.forEach(rows, function(row) {
+                        if (row) {
+                            dojo.destroy(row);
+                        }
+                    });
+                    rows = [];
+                };
+            
+                that._checkReadyField = function(readyFieldExist) {
+                    if (!readyFieldExist) {
+                        var msgText = "To enable the 'ready to pull' feature, create a custom field named 'Ready' on the User Story and Defect work products.";
+                        var messageElement = document.createElement("div");
+                        messageElement.id = "appSettingsDialogMsg";
+            
+                        var messageTextElement = document.createElement("span");
+                        messageElement.appendChild(messageTextElement);
+            
+                        var textNode = document.createTextNode(msgText);
+                        if (messageTextElement.firstChild) {
+                            messageTextElement.replaceChild(textNode, messageTextElement.firstChild);
+                        } else {
+                            messageTextElement.appendChild(textNode);
+                        }
+            
+                        dojo.addClass(messageElement, "configMessage");
+                        dojo.byId("msgContainer").appendChild(messageElement);
+                    }
+                };
+            
+                that._displayTogglePreferences = function() {
+                    hideCardsCheckBox = new rally.sdk.ui.basic.CheckBox({
+                        label:"Hide cards in last visible column if assigned to a release",
+                        showLabel:true,
+                        labelPosition:"after",
+                        checked: true,
+                        rememberChecked: true
+                    });
+                    hideCardsCheckBox.display("hideCardsCheckBox");
+            
+                    showTasksCheckBox = new rally.sdk.ui.basic.CheckBox({
+                        label:"Show task status for cards with tasks",
+                        showLabel:true,
+                        labelPosition:"after",
+                        checked: true,
+                        rememberChecked: true
+                    });
+                    showTasksCheckBox.display("showTasksCheckBox");
+            
+                    showDefectsCheckBox = new rally.sdk.ui.basic.CheckBox({
+                        label:"Show defect status for cards with defects",
+                        showLabel:true,
+                        labelPosition:"after",
+                        checked: true,
+                        rememberChecked: true
+                    });
+                    showDefectsCheckBox.display("showDefectsCheckBox");
+            
+                    showAgeCheckBox = new rally.sdk.ui.basic.CheckBox({
+                        label:"Show age for card after",
+                        showLabel:true,
+                        labelPosition:"after",
+                        checked: false,
+                        rememberChecked: true
+                    });
+                    showAgeCheckBox.display("showAgeCheckBox");
+            
+                    showAgeTextBox = new rally.sdk.ui.basic.TextBox({
+                        label: " day(s) in column",
+                        showLabel:true,
+                        labelPosition:"after",
+                        width: 30,
+                        value: 3,
+                        rememberValue: true
+                    });
+                    showAgeTextBox.addEventListener("onChange", that._alterAgeTextBox);
+                    showAgeTextBox.display("showAgeTextBox");
+            
+                    colorByArtifactTypeCheckBox = new rally.sdk.ui.basic.CheckBox({
+                        label:"Color card headers by work item type",
+                        showLabel:true,
+                        labelPosition:"after",
+                        checked: false,
+                        rememberChecked: true
+                    });
+                    colorByArtifactTypeCheckBox.display("colorByArtifactTypeCheckBox");
+                };
+            
+                that._displayColumnPreferences = function(dropdown, args) {
+                    that._destroyPreviousControls();
+                    accessors = [];
+                    var attributeObject = allAttributes[args.value];
+                    var tableBody = dojo.byId("configTableBody");
+            
+                    dojo.forEach(attributeObject.AllowedValues, function(allowed) {
+                        var row = that._createAllowedValueTableRow(allowed, attributeObject.Name);
+                        rows.push(row);
+                        tableBody.appendChild(row);
+                    });
+                    that.displayDialog();
+                };
+            
+                that._translateAllowedValuesToDropdownItems = function(values) {
+                    var items = {};
+                    items[notMappedKey] = notMappedVal;
+                    dojo.forEach(values, function(value) {
+                        items[value.StringValue] = value.StringValue;
+                    });
+                    return items;
+                };
+            
+                that._displayHelpDialog = function() {
+                    var configHelpElement = dojo.byId("configHelp");
+                    dojo.addClass(configHelpElement, "configHelp");
+                    var help = new rally.sdk.ui.Help();
+                    help.setHelpTopic("238");
+                    help.display(configHelpElement);
+                };
+            
+                that._displayKanbanFieldDropdown = function(callback) {
+                    allAttributes = {};
+            
+                    function gatherAttributes(results) {
+            
+                        try {
+                            var usableFields = {};
+                            var firstAttr,scheduleStateAttr,attributes = [];
+                            var readyFieldExist = false;
+            
+                            dojo.forEach(results.types, function(type) {
+                                attributes = attributes.concat(type.Attributes);
+                            });
+                            attributes.sort(function(a, b) {
+                                var nameA = a.Name.toLowerCase();
+                                var nameB = b.Name.toLowerCase();
+                                if (nameA < nameB) {
+                                    return -1;
+                                }
+                                if (nameA > nameB) {
+                                    return 1;
+                                }
+                                return 0;
+                            });
+            
+                            dojo.forEach(attributes, function(attr) {
+                                if (attr.Constrained && attr.AttributeType !== "OBJECT" && attr.AttributeType !== "COLLECTION") {
+                                    firstAttr = firstAttr || attr;
+                                    usableFields[attr.ElementName] = attr.Name;
+                                    allAttributes[attr.ElementName] = attr;
+                                }
+                                if (attr.Name == "Ready") {
+                                    readyFieldExist = true;
+                                }
+                                if (attr.Name == "Schedule State") {
+                                    scheduleStateAttr = attr;
+                                    scheduleStateValues = that._translateAllowedValuesToDropdownItems(attr.AllowedValues);
+                                }
+                            });
+                            stateDropdown = new rally.sdk.ui.basic.Dropdown({
+                                defaultValue : scheduleStateAttr.ElementName,
+                                label:"Group By",
+                                showLabel:true,
+                                items:usableFields
+                            });
+            
+                            stateDropdown.addEventListener("onLoad", callback);
+                            stateDropdown.addEventListener("onChange", callback);
+                            stateDropdown.display("stateDropdown");
+            
+                            that._displayTogglePreferences();
+            
+                            that._checkReadyField(readyFieldExist);
+            
+                        }
+                        catch(ex) {
+                            if (ex.stack) {
+                                rally.Logger.warn(ex.stack);
+                            }
+                            rally.Logger.warn(ex);
+                        }
+                    }
+            
+                    rallyDataSource.find({
+                        type:"TypeDefinition",
+                        key: "types",
+                        query:'( Name = "Hierarchical Requirement" )',
+                        fetch:"Name,Attributes",
+                        project:null
+                    }, gatherAttributes);
+                };
+            
+                //This wraps our controls to get their values
+                that._getValues = function() {
+                    var values = {
+                        kanbanField:stateDropdown.getValue(),
+                        reportKanbanField:stateDropdown.getDisplayedValue(),
+                        fieldInfos:{},
+                        hideLastColumnIfReleased:hideCardsCheckBox.getChecked(),
+                        showTaskCompletion: showTasksCheckBox.getChecked(),
+                        showDefectStatus: showDefectsCheckBox.getChecked(),
+                        showAge: showAgeCheckBox.getChecked(),
+                        showAgeAfter: showAgeTextBox.getValue(),
+                        colorByArtifactType: colorByArtifactTypeCheckBox.getChecked()
+                    };
+                    rally.forEach(accessors, function(value) {
+                        values.fieldInfos[value.field] = value.get();
+            
+                        //ensure we don't lose policy descriptions that already stored for that field
+                        if (currentPrefs && currentPrefs.fieldInfos &&
+                                currentPrefs.fieldInfos[value.field] && currentPrefs.fieldInfos[value.field].policy) {
+                            values.fieldInfos[value.field].policy = currentPrefs.fieldInfos[value.field].policy;
+                        }
+                    });
+                    return values;
+                };
+            
+                //this wraps the controls and sets their values.
+                that._setValues = function() {
+                    hideCardsCheckBox.setChecked(currentPrefs.hideLastColumnIfReleased);
+                    showTasksCheckBox.setChecked(currentPrefs.showTaskCompletion);
+                    showDefectsCheckBox.setChecked(currentPrefs.showDefectStatus);
+                    showAgeCheckBox.setChecked(currentPrefs.showAge);
+                    showAgeTextBox.setValue(currentPrefs.showAgeAfter);
+                    colorByArtifactTypeCheckBox.setChecked(currentPrefs.colorByArtifactType);
+            
+                    function setValues() {
+                        var fieldInfos = currentPrefs.fieldInfos;
+                        // remove the Event Handler from the dropdown
+                        if (deleter) {
+                            deleter.remove();
+                        }
+                        rally.forEach(accessors, function(accessor) {
+                            if (fieldInfos[accessor.field]) {
+                                accessor.set(fieldInfos[accessor.field]);
+                            }
+                        });
+                    }
+            
+                    if (stateDropdown.getValue() !== currentPrefs.kanbanField) {
+                        stateDropdown.setValue(currentPrefs.kanbanField);
+                        var deleter = stateDropdown.addEventListener("onChange", setValues);
+                    }
+                    else {
+                        setValues();
+                    }
+                };
+            
+                that._retrievePreferences = function(/*function*/callback) {
+                    function populateConfigForm(results) {
+                        var workspacePref;
+                        var projectPref;
+                        if (results.length) {
+                            dojo.forEach(results, function(p) {
+                                if (p.Project) {
+                                    //projectOid is a string need both strings to compare.
+                                    var projectRef = rally.sdk.util.Ref.getOidFromRef(p.Project) + "";
+                                    if (projectRef === rallyDataSource.projectOid) {
+                                        projectPref = p;
+                                        projectPrefRef = projectPref._ref;
+                                    }
+                                }
+                                if (p.Workspace) {
+                                    workspacePrefRef = p._ref;
+                                    workspacePref = p;
+                                }
+                            });
+                            if (projectPref) {
+                                currentPrefs = projectPref.Value;
+                                that._setValues();
+                                callback({projectName:projectPref.Project._refObjectName});
+                            }
+                            else if (workspacePref) {
+                                currentPrefs = workspacePref.Value;
+                                that._setValues();
+                                callback({workspaceName:workspacePref.Workspace._refObjectName});
+                            }
+                        } else {
+                            callback({});
+                        }
+                    }
+            
+                    rallyDataSource.preferences.getAppPreferences(populateConfigForm);
+                };
+            
+                that._saveComplete = function() {
+                    dialog.hide();
+                    that._retrievePreferences(function() {
+                    });
+                    onConfigHide();
+                };
+            
+                that._storeValues = function(callback) {
+            
+                    function workspaceCallback(results) {
+            
+                    }
+            
+                    function errorCallback(results) {
+                        rally.Logger.warn(results);
+                    }
+            
+                    function errorProjectCallback(results) {
+                        dialog.hide();
+                        rally.Logger.warn(results);
+                        if (results.Errors.length > 0) {
+                            var error = results.Errors[0];
+                            if (error.match(/user does not have preference write permission/i)) {
+                                error = "You must have Editor permissions to setup the Kanban Board for the current project.";
+                            }
+                            rally.sdk.ui.AppHeader.showMessage("error", error, 10000);
+                        }
+                    }
+            
+                    function updateAppPreference(pref) {
+            
+                        currentPrefs = dojo.fromJson(pref.Value);
+                        var updatedPref = {_ref : projectPrefRef,
+                            Value:that._getValues()
+                        };
+                        rallyDataSource.preferences.update(updatedPref, callback, errorProjectCallback);
+                    }
+            
+                    if (!projectPrefRef) {
+                        if (!workspacePrefRef) {
+                            rallyDataSource.preferences.createAppPreference(
+                                    {
+                                        Name: "Kanban/WipSettings",
+                                        Value: that._getValues(),
+                                        Workspace:"/Workspace/" + rallyDataSource.workspaceOid
+                                    },
+                                    workspaceCallback,
+                                    errorCallback);
+                        }
+                        rallyDataSource.preferences.createAppPreference(
+                                {
+                                    Name: "Kanban/WipSettings",
+                                    Value: that._getValues(),
+                                    Project:"/Project/" + rallyDataSource.projectOid
+                                },
+                                callback,
+                                errorProjectCallback);
+                    }
+                    else {
+            
+                        //Re-read pref before saving so we don't clobber anything
+                        rallyDataSource.getRallyObject(projectPrefRef, updateAppPreference, errorCallback);
+            
+                    }
+            
+                };
+            
+            };            /**
+             Copyright (c) 2011  Rally Software Development Corp.  All rights reserved
+             */
+            
+            KanbanPolicy = function(rallyDataSource, callback) {
+            
+            
+                var that = this;
+                var workspacePrefRef, projectPrefRef, fieldName, policyDesc;
+            
+                that._updatePolicyPref = function(currentPrefs) {
+                    currentPrefs.fieldInfos[fieldName].policy = policyDesc;
+                    that._storeValues(currentPrefs);
+                };
+            
+                that.savePolicy = function(field, policy) {
+                    fieldName = field;
+                    policyDesc = dojo.trim(policy);
+                    that._retrievePreferences(that._updatePolicyPref);
+                };
+            
+                that._retrievePreferences = function(prefCallback) {
+                    function getProjectOrWorkspacePref(results) {
+                        var workspacePref, projectPref, currentPrefs;
+            
+                        if (results.length) {
+                            dojo.forEach(results, function(p) {
+                                if (p.Project) {
+                                    //projectOid is a string need both strings to compare.
+                                    var projectRef = rally.sdk.util.Ref.getOidFromRef(p.Project) + "";
+                                    if (projectRef === rallyDataSource.projectOid) {
+                                        projectPref = p;
+                                        projectPrefRef = projectPref._ref;
+                                    }
+                                }
+                                if (p.Workspace) {
+                                    workspacePref = p;
+                                    workspacePrefRef = p._ref;
+                                }
+                            });
+                            if (projectPref) {
+                                currentPrefs = projectPref.Value;
+                            }
+                            else if (workspacePref) {
+                                currentPrefs = workspacePref.Value;
+                            }
+                        }
+                        prefCallback(currentPrefs);
+                    }
+                    rallyDataSource.preferences.getAppPreferences(getProjectOrWorkspacePref);
+                };
+            
+                that._storeValues = function(values) {
+                    function successCallback(results) {
+                        callback(policyDesc);
+                    }
+            
+                    function errorProjectCallback(results) {
+                        rally.Logger.warn(results);
+                        if (results.Errors.length > 0) {
+                            var error = results.Errors[0];
+                            if (error.match(/user does not have preference write permission/i)) {
+                                error = "You must have Editor permissions to set up the Kanban Board for the current project.";
+                            }
+                            rally.sdk.ui.AppHeader.showMessage("error", error, 10000);
+                            callback(null);
+                        }
+                    }
+            
+                    if (!projectPrefRef) {
+                        rally.sdk.ui.AppHeader.showMessage("error", "You must set up a Kanban Board before creating column policies.", 10000);
+                    }
+                    else {
+            
+                        var pref = {_ref : projectPrefRef,
+                            Value: values
+                        };
+                        rallyDataSource.preferences.update(pref, successCallback, errorProjectCallback);
+                    }
+            
+                };
+            
+            };            KanbanReport = function(config, rallyDataSource) {
+                var that = this;
+            
+                var dialog, report, divId, msgDiv;
+                var artifactTypes = config.artifactTypes;
+                var reportName = config.reportName;
+            
+                var reportWidth = 500;
+                var reportHeight = 350;
+            
+                that._onDialogClose = function(d, args) {
+                    d.destroy();
+                };
+            
+                that._onLoad = function() {
+                    msgDiv.style.display = 'none';
+                };
+            
+                that._displayReport = function() {
+                    dialog.display();
+                    report.display(divId, that._onLoad); //need to render dialog before we can populate the iframe with report
+            
+                    //workaround for the sub-chart that adds 125px to height
+                    dojo.query("iframe").forEach(function(node, index, arr) {
+                        dojo.attr(node, "style", {
+                            height: reportHeight + "px",
+                            width: reportWidth + "px"
+                        });
+                    });
+                };
+            
+                that._createReport = function() {
+                    var workItems,reportConfig;
+                    var dialogDiv = document.createElement("div");
+            
+                    msgDiv = document.createElement("div");
+                    msgDiv.innerHTML = "Some reports may take up to 4 minutes to load.";
+                    dialogDiv.appendChild(msgDiv);
+            
+                    var map = {Defect: 'D', HierarchicalRequirement: 'G'};
+            
+                    if (artifactTypes.length === 2) {
+                        workItems = 'N';
+                    } else {
+                        workItems = map[artifactTypes];
+                    }
+            
+                    reportConfig = {
+                        report: config.reportNumber,
+                        width: reportWidth - 25, //make chart a bit smaller than dialog
+                        height: reportHeight - 150, //EB account for sub-chart that takes up 125px
+                        work_items: workItems
+                    };
+            
+                    //workaround issue with reports where applying filter on ScheduleState causes no data to be returned
+                    if (config.reportKanbanField !== "Schedule State") {
+                        reportConfig.filter_field = config.reportKanbanField;
+                    }
+            
+                    if (config.tags) {
+                        reportConfig.tags = config.tags;
+                    }
+            
+                    //window.top check ensures we are not running in the pop out
+                    if (!rally.sdk.util.Context.isInsideRally() && window.top === window.self) {
+                        reportConfig.project = rallyDataSource.projectOid;
+                        reportConfig.projectScopeDown = rallyDataSource.projectScopeDown;
+                        reportConfig.projectScopeUp = rallyDataSource.projectScopeUp;
+                    }
+            
+                    var reportDiv = document.createElement("div");
+                    reportDiv.id = divId;
+                    dojo.addClass(reportDiv, "kanbanReport");
+                    dialogDiv.appendChild(reportDiv);
+            
+                    report = new rally.sdk.ui.StandardReport(reportConfig);
+                    return dialogDiv;
+                };
+            
+                that._createReportDialog = function() {
+                    if (!artifactTypes || artifactTypes.length <= 0) {
+                        rally.sdk.ui.AppHeader.showMessage("error", "No " + reportName + " data to show", 5000);
+                        return;
+                    }
+            
+                    dialog = new rally.sdk.ui.basic.Dialog({title: reportName, draggable: true,
+                        closable: false, width: reportWidth + 25, height: reportHeight + 25, buttons:["Close"],
+                        content: that._createReport()});
+            
+                    dialog.addEventListener("onButtonClick", that._onDialogClose);
+                    that._displayReport(divId);
+                };
+            
+                this.display = function(element) {
+                    divId = element;
+                    that._createReportDialog();
+                };
+            };
+  </script>
+
+  <style type="text/css">
+        .appHeaderContainer {
+        margin-top: 0;
+        margin-bottom: 0;
+    }
+    
+    .appHeader {
+        position: relative;
+    }
+    
+    .togglePoliciesContainer {
+        display: inline;
+    }
+    
+    .controlContainer {
+        margin-top: 10px;
+        margin-right: 20px;
+        float: right;
+    }
+    
+    .typeFilterContainer {
+        float: left;
+        margin-left: 3px;
+    }
+    
+    .dropdownContainer {
+        float: left;
+        margin-left: 3px;
+        margin-right: 10px;
+    }
+    
+    .dropdownContainer .filterByTagsDropdown .dijitTextBox {
+        vertical-align: middle;
+    }
+    
+    .dropdownContainer .filterByTagsDropdown .dropdownLabel {
+        vertical-align: middle;
+    }
+    
+    .kanbanBoard {
+        clear: both;
+    }
+    
+    .overCapacity .columnHeader {
+        color: #FC5350;
+    }
+    
+    .overCapacity .columnContent {
+        background-color: #F9E2E1;
+    }
+    
+    .cardboard .columnHeader {
+        height: 35px;
+    }
+    
+    .columnPolicy {
+        margin: 5px;
+        border-top: 1px dotted #c6c6c6;
+        padding-top: 5px;
+    }
+    
+    .hidePolicy {
+        display: none;
+    }
+    
+    .columnPolicy .policyHeaderDiv {
+        color: #808080;
+        font-weight: bold;
+        padding-bottom: 3px;
+    }
+    
+    .columnPolicy .policySubheaderDiv {
+        color: #808080;
+        display: none;
+        padding-bottom: 4px;
+    }
+    
+    .columnPolicy textarea {
+        color: #808080;
+        font: 11px arial, tahoma, helvetica, sans-serif;
+        resize: none;
+    }
+    
+    .columnPolicy .dijitTextBoxDisabled {
+        background-color: transparent;
+    }
+    
+    .columnPolicy .dijitTextAreaDisabled {
+        color: #c6c6c6 !important;
+    }
+    
+    .columnPolicy .dijitTextBox {
+        background: none;
+    }
+    
+    .editPolicyDiv {
+        padding-top: 3px;
+        text-align: center;
+    }
+    
+    .editPolicyDiv a {
+        vertical-align: middle;
+    }
+    
+    .editPolicyDivExtraPadding {
+        padding-top: 8px;
+    }
+    
+    .cardboard .capacityDisplay {
+        font-size: 12px;
+        line-height: 20px;
+    }
+    
+    .cardboard .cardMenu {
+        height: 0;
+        background-color: #F4F7F8;
+        line-height: 18px;
+        padding-top: 1px;
+        overflow: hidden;
+    }
+    
+    .cardboard .cardHeader {
+        background-color: #e0e0e0;
+    }
+    
+    .cardboard .ready .cardContent, .cardboard .blocked .cardContent {
+        overflow: hidden; /*KRM - For Chrome*/
+    }
+    
+    .cardboard .cardMenu.expanded {
+        border-top: 1px;
+        border-top-style: dotted;
+        border-top-color: #CCC;
+        padding: 0;
+    }
+    
+    .cardboard .infinitySymbol {
+        font-size: 16px;
+        position: relative;
+        top: 2px;
+    }
+    
+    .cardboard .readyIndicator, .cardboard .blockedIndicator {
+        width: 16px;
+        height: 16px;
+        float: right;
+        margin: 1px;
+        cursor: pointer;
+    }
+    
+    .cardboard .readyIndicator {
+        background-image: url(/apps/images/unready.png);
+    }
+    
+    .cardboard .ready .readyIndicator {
+        overflow: hidden; /*KRM - For Chrome*/
+        background-image: url(/apps/images/ready.png);
+    }
+    
+    .cardboard .blockedIndicator {
+        background-image: url(/apps/images/not-blocked.png);
+    }
+    
+    .cardboard .blocked .blockedIndicator {
+        overflow: hidden; /*KRM - For Chrome*/
+        background-image: url(/apps/images/blocked.png);
+    }
+    
+    .cardboard .ready {
+        border: 3px solid #21CD18;
+    }
+    
+    .cardboard .blocked {
+        border: 3px solid #EF3F36;
+    }
+    
+    .cardboard .cardContent .status {
+        border-top: 1px dotted #ccc;
+        margin-top: 5px;
+    }
+    
+    .cardboard .cardContent .status a {
+        color: #666;
+    }
+    
+    .cardboard .cardContent .tasks, .defects {
+        background-repeat: no-repeat;
+        color: #666;
+        padding-top: 5px;
+        padding-left: 16px;
+        line-height: 12px;
+    }
+    
+    .cardboard .cardContent .tasks.none {
+        background-image: url(/apps/resources/Kanban/status-defined-12.png);
+        background-position: left bottom;
+    }
+    
+    .cardboard .cardContent .tasks.some {
+        background-image: url(/apps/resources/Kanban/status-inprogress-good-12.png);
+        background-position: left bottom;
+    }
+    
+    .cardboard .cardContent .tasks.all, .cardboard .cardContent .defects.all {
+        background-image: url(/apps/resources/Kanban/status-good-12.png);
+        background-position: left bottom;
+    }
+    
+    .cardboard .cardContent .defects.none {
+        background-image: url(/apps/resources/Kanban/status-bad-12.png);
+        background-position: left bottom;
+    }
+    
+    .cardboard .cardContent .defects.some {
+        background-image: url(/apps/resources/Kanban/status-inprogress-bad-12.png);
+        background-position: left bottom;
+    }
+    
+    .cardboard .filterByFade {
+        -ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=30)";
+        filter: alpha(opacity = 30);
+        opacity: .3;
+        zoom: 1; /*ANS - necessary for IE7 opacity */
+    }
+    
+    .cardboard .filterByFade.blocked,
+    .cardboard .filterByFade.ready {
+        -ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=30)";
+        filter: alpha(opacity = 30);
+        opacity: .3;
+        zoom: 1; /*ANS - necessary for IE7 opacity */
+    }
+    
+    .cardboard .editLinkContainer {
+        float: left;
+        padding-left: 5px;
+        vertical-align: middle;
+    }
+    
+    .wipTextBoxContainer .dijitTextBox {
+        width: 40px;
+    }
+    
+    #configPanel {
+        visibility: hidden;
+    }
+    
+    .tableHeaderRow {
+        font-weight: bold;
+        text-align: left;
+    }
+    
+    .configCheckBox {
+        text-align: center;
+    }
+    
+    .configMessage {
+        margin-top: 5px;
+        word-wrap: break-word;
+        width: 300px;
+        color: #EF3F36;
+    }
+    
+    .configHelp {
+        float: right;
+    }
+    
+    .kanbanReport {
+        float: left;
+    }
+    
+    #configTable {
+        margin-top: 10px;
+        margin-bottom: 10px;
+    }
+    
+    .dijitTooltipContents {
+        font-size: 9.5px;
+    }
+    
+    .buttonContainer.saveCancelButtons span,
+    .buttonContainer.saveCancelButtons a {
+        vertical-align: middle;
+    }
+    
+    #showAgeTextBoxInnerDivLabel {
+        vertical-align: baseline;
+    }
+    
+    #widget_showAgeTextBoxInnerDiv {
+        vertical-align: top;
+    }
+    
+    .cardboard .columnContent .agedCard {
+        border-top: 1px dotted #ccc;
+        color: #666666;
+        margin-top: 5px;
+        padding-top: 5px;
+    }
+  </style>
+    <script type="text/javascript">
+        //this function will help us by getting our default project and workspace to help with external kanban development.
+        var WORKSPACE_OID,PROJECT_OID,PROJECT_SCOPE_UP,PROJECT_SCOPE_DOWN;
+        function projectParser(response) {
+            var meta = response.QueryResult.Meta;
+            var numberYankingRegex = /[^\d]/g;
+            WORKSPACE_OID = meta.workspace.replace(numberYankingRegex, '');
+            PROJECT_OID = meta.project.replace(numberYankingRegex, '');
+        }
+    </script>
+    <script type="text/javascript"
+            src="https://rally1.rallydev.com/slm/webservice/1.29/artifact.js?projectScopeUp=false&projectScopeDown=false&pagesize=1&jsonp=projectParser&includeMeta=true"></script>
+
+    <script type="text/javascript">
+        /*configure following if you plan to run the Kanban app externally
+         rally.sdk.info.server = "https://community.rallydev.com/slm";*/
+
+        /********************************/
+            //this gets the hang man's and overrides your defaults.
+        var projectOid = '__PROJECT_OID__';
+        projectOid = projectOid.indexOf("__") !== -1 ? PROJECT_OID : projectOid;
+        var workspaceOid = '__WORKSPACE_OID__';
+        workspaceOid = workspaceOid.indexOf("__") !== -1 ? WORKSPACE_OID : workspaceOid;
+        var projectScopeUp = '__PROJECT_SCOPING_UP__';
+        projectScopeUp = projectScopeUp.indexOf("__") !== -1 ? PROJECT_SCOPE_UP : projectScopeUp;
+        var projectScopeDown = '__PROJECT_SCOPING_DOWN__';
+        projectScopeDown = projectScopeDown.indexOf("__") !== -1 ? PROJECT_SCOPE_DOWN : projectScopeDown;
+
+        function onLoad() {
+
+            var rallyDataSource = new rally.sdk.data.RallyDataSource(workspaceOid,
+                    projectOid, projectScopeUp, projectScopeDown);
+
+            rallyDataSource.projectOid = projectOid;
+            rallyDataSource.workspaceOid = workspaceOid;
+            rallyDataSource.projectScopeUp = projectScopeUp;
+            rallyDataSource.projectScopeDown = projectScopeDown;
+
+            var config, kanbanBoard;
+
+            function configShow() {
+                if (!config) {
+                    config = new KanbanConfigPanel(rallyDataSource, kanbanBoard._redisplayBoard);
+                    config.display();
+                }
+                else {
+                    config.show();
+                }
+            }
+
+            rally.sdk.ui.AppHeader.addPageTool({
+                key:"showConfig",
+                label: "Settings...",
+                onClick: configShow
+            });
+            kanbanBoard = new KanbanBoard(rallyDataSource, configShow);
+            kanbanBoard.display(dojo.body());
+
+        }
+        rally.addOnLoad(onLoad);
+
+    </script>
+</head>
+<body>
+<div style="display:none">
+    <div id="configPanel">
+        <div id="configHelp"></div>
+        <div id="stateDropdown"></div>
+        <table id="configTable" cellspacing="15">
+            <tbody id="configTableBody">
+            <tr class="tableHeaderRow">
+                <td>Column</td>
+                <td>Display</td>
+                <td>WIP Limit</td>
+                <td>Schedule State Mapping</td>
+            </tr>
+            </tbody>
+        </table>
+        <div id="hideCardsCheckBox"></div>
+        <div id="showTasksCheckBox"></div>
+        <div id="showDefectsCheckBox"></div>
+        <div>
+            <span id="showAgeCheckBox"></span>
+            <span id="showAgeTextBox"></span>
+        </div>
+        <div id="colorByArtifactTypeCheckBox"></div>
+        <div id="msgContainer"></div>
+    </div>
+</div>
+</body>
+</html>
+

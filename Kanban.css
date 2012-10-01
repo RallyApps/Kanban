@@ -1,0 +1,298 @@
+.appHeaderContainer {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.appHeader {
+    position: relative;
+}
+
+.togglePoliciesContainer {
+    display: inline;
+}
+
+.controlContainer {
+    margin-top: 10px;
+    margin-right: 20px;
+    float: right;
+}
+
+.typeFilterContainer {
+    float: left;
+    margin-left: 3px;
+}
+
+.dropdownContainer {
+    float: left;
+    margin-left: 3px;
+    margin-right: 10px;
+}
+
+.dropdownContainer .filterByTagsDropdown .dijitTextBox {
+    vertical-align: middle;
+}
+
+.dropdownContainer .filterByTagsDropdown .dropdownLabel {
+    vertical-align: middle;
+}
+
+.kanbanBoard {
+    clear: both;
+}
+
+.overCapacity .columnHeader {
+    color: #FC5350;
+}
+
+.overCapacity .columnContent {
+    background-color: #F9E2E1;
+}
+
+.cardboard .columnHeader {
+    height: 35px;
+}
+
+.columnPolicy {
+    margin: 5px;
+    border-top: 1px dotted #c6c6c6;
+    padding-top: 5px;
+}
+
+.hidePolicy {
+    display: none;
+}
+
+.columnPolicy .policyHeaderDiv {
+    color: #808080;
+    font-weight: bold;
+    padding-bottom: 3px;
+}
+
+.columnPolicy .policySubheaderDiv {
+    color: #808080;
+    display: none;
+    padding-bottom: 4px;
+}
+
+.columnPolicy textarea {
+    color: #808080;
+    font: 11px arial, tahoma, helvetica, sans-serif;
+    resize: none;
+}
+
+.columnPolicy .dijitTextBoxDisabled {
+    background-color: transparent;
+}
+
+.columnPolicy .dijitTextAreaDisabled {
+    color: #c6c6c6 !important;
+}
+
+.columnPolicy .dijitTextBox {
+    background: none;
+}
+
+.editPolicyDiv {
+    padding-top: 3px;
+    text-align: center;
+}
+
+.editPolicyDiv a {
+    vertical-align: middle;
+}
+
+.editPolicyDivExtraPadding {
+    padding-top: 8px;
+}
+
+.cardboard .capacityDisplay {
+    font-size: 12px;
+    line-height: 20px;
+}
+
+.cardboard .cardMenu {
+    height: 0;
+    background-color: #F4F7F8;
+    line-height: 18px;
+    padding-top: 1px;
+    overflow: hidden;
+}
+
+.cardboard .cardHeader {
+    background-color: #e0e0e0;
+}
+
+.cardboard .ready .cardContent, .cardboard .blocked .cardContent {
+    overflow: hidden; /*KRM - For Chrome*/
+}
+
+.cardboard .cardMenu.expanded {
+    border-top: 1px;
+    border-top-style: dotted;
+    border-top-color: #CCC;
+    padding: 0;
+}
+
+.cardboard .infinitySymbol {
+    font-size: 16px;
+    position: relative;
+    top: 2px;
+}
+
+.cardboard .readyIndicator, .cardboard .blockedIndicator {
+    width: 16px;
+    height: 16px;
+    float: right;
+    margin: 1px;
+    cursor: pointer;
+}
+
+.cardboard .readyIndicator {
+    background-image: url(/apps/images/unready.png);
+}
+
+.cardboard .ready .readyIndicator {
+    overflow: hidden; /*KRM - For Chrome*/
+    background-image: url(/apps/images/ready.png);
+}
+
+.cardboard .blockedIndicator {
+    background-image: url(/apps/images/not-blocked.png);
+}
+
+.cardboard .blocked .blockedIndicator {
+    overflow: hidden; /*KRM - For Chrome*/
+    background-image: url(/apps/images/blocked.png);
+}
+
+.cardboard .ready {
+    border: 3px solid #21CD18;
+}
+
+.cardboard .blocked {
+    border: 3px solid #EF3F36;
+}
+
+.cardboard .cardContent .status {
+    border-top: 1px dotted #ccc;
+    margin-top: 5px;
+}
+
+.cardboard .cardContent .status a {
+    color: #666;
+}
+
+.cardboard .cardContent .tasks, .defects {
+    background-repeat: no-repeat;
+    color: #666;
+    padding-top: 5px;
+    padding-left: 16px;
+    line-height: 12px;
+}
+
+.cardboard .cardContent .tasks.none {
+    background-image: url(/apps/resources/Kanban/status-defined-12.png);
+    background-position: left bottom;
+}
+
+.cardboard .cardContent .tasks.some {
+    background-image: url(/apps/resources/Kanban/status-inprogress-good-12.png);
+    background-position: left bottom;
+}
+
+.cardboard .cardContent .tasks.all, .cardboard .cardContent .defects.all {
+    background-image: url(/apps/resources/Kanban/status-good-12.png);
+    background-position: left bottom;
+}
+
+.cardboard .cardContent .defects.none {
+    background-image: url(/apps/resources/Kanban/status-bad-12.png);
+    background-position: left bottom;
+}
+
+.cardboard .cardContent .defects.some {
+    background-image: url(/apps/resources/Kanban/status-inprogress-bad-12.png);
+    background-position: left bottom;
+}
+
+.cardboard .filterByFade {
+    -ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=30)";
+    filter: alpha(opacity = 30);
+    opacity: .3;
+    zoom: 1; /*ANS - necessary for IE7 opacity */
+}
+
+.cardboard .filterByFade.blocked,
+.cardboard .filterByFade.ready {
+    -ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=30)";
+    filter: alpha(opacity = 30);
+    opacity: .3;
+    zoom: 1; /*ANS - necessary for IE7 opacity */
+}
+
+.cardboard .editLinkContainer {
+    float: left;
+    padding-left: 5px;
+    vertical-align: middle;
+}
+
+.wipTextBoxContainer .dijitTextBox {
+    width: 40px;
+}
+
+#configPanel {
+    visibility: hidden;
+}
+
+.tableHeaderRow {
+    font-weight: bold;
+    text-align: left;
+}
+
+.configCheckBox {
+    text-align: center;
+}
+
+.configMessage {
+    margin-top: 5px;
+    word-wrap: break-word;
+    width: 300px;
+    color: #EF3F36;
+}
+
+.configHelp {
+    float: right;
+}
+
+.kanbanReport {
+    float: left;
+}
+
+#configTable {
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+.dijitTooltipContents {
+    font-size: 9.5px;
+}
+
+.buttonContainer.saveCancelButtons span,
+.buttonContainer.saveCancelButtons a {
+    vertical-align: middle;
+}
+
+#showAgeTextBoxInnerDivLabel {
+    vertical-align: baseline;
+}
+
+#widget_showAgeTextBoxInnerDiv {
+    vertical-align: top;
+}
+
+.cardboard .columnContent .agedCard {
+    border-top: 1px dotted #ccc;
+    color: #666666;
+    margin-top: 5px;
+    padding-top: 5px;
+}
