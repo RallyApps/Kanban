@@ -15,7 +15,7 @@ In other words, a Kanban board only shows the next few stories that need to be c
 
 ### Running the App
 
-If you want to start using the app immediately, create an Custom HTML app on your Rally dashboard. Then copy App.html from the deploy folder into the HTML text area. That's it, it should be ready to use.
+If you want to start using the app immediately, create an Custom HTML app on your Rally dashboard. Then copy App.html from the deploy folder into the HTML text area. That's it, it should be ready to use. See [this](http://www.rallydev.com/help/use_apps#create) help link if you don't know how to create a dashboard page for Custom HTML apps.
 
 Or you can just click [here](https://raw.github.com/RallyApps/Kanban/master/deploy/App.html) to find the file and copy it into the custom HTML app.
 
@@ -29,7 +29,7 @@ To switch states of cards, just click on the card header and drag it to the colu
 
 ![Drag](https://raw.github.com/RallyApps/Kanban/master/screenshots/drag-screenshot.png)
 
-You can still go into the user story/defect detail page by clicking on the user story/defect ID on the top right of the card.
+You can still go into the user story/defect detail page by clicking on the user story/defect ID on the top left of the card.
 
 ## Customize this App
 
