@@ -1126,11 +1126,10 @@ def sanitize_string(value)
 end
 
 def set_https(uri)
-  prefix = uri.match('^(http(s?):(\/\/?))') ? '' : 'https://'
-
-  if uri =~ /\/\// and not prefix.empty? # schema given; force ours
+  prefix = 'https://'
+  if uri =~ /\/\//     # schema given; force ours
     uri.gsub!(/^.*\/\//, prefix)
-  else                                   # no schema given
+  else                 # no schema given
     uri = prefix + uri
   end
   uri
