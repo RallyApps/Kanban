@@ -7,14 +7,12 @@ ENABLE_JSLINT = ENV['ENABLE_JSLINT'] == 'true'
 
 task :default => [:debug, :build]
 
-desc "Create an app with the provided name (and optional SDK version)"
-task :new, :app_name, :sdk_version do |t, args|
-  args.with_defaults(:sdk_version => "2.0p3")
+desc "Create an app with the provided name (and optional SDK version and rally server)"
+task :new, :app_name, :sdk_version, :server do |t, args|
+  args.with_defaults(:sdk_version => "2.0p5")
   Dir.chdir(Rake.original_dir)
-
-  puts "Generating new #{args[:sdk_version]} App Development framework..."
-
-  config = Rally::AppSdk::AppConfig.new(args.app_name, args.sdk_version)
+  puts "Generating new #{args[:sdk_version]} Rally App Development framework..."
+  config = Rally::AppSdk::AppConfig.new(args.app_name, args.sdk_version, args.server)
   Rally::AppSdk::AppTemplateBuilder.new(config).build
 
   puts "Finished!"
@@ -177,8 +175,10 @@ module Rally
       end
 
       def deploy
-        puts "Deploying to Rally..."
 
+        raise "Unable to deploy.  Missing values in deploy.json config file. Aborting..." if !@config.deployable?
+
+        puts "Deploying to Rally..."
         login  # obtains session info
         resolve_project  # determine if using oid or name from config
 
@@ -364,7 +364,7 @@ module Rally
         content += "<!-- a local browser to experience the speed! (e.g. file:///path/to/#{filename}) -->\n"
         content += "<html><body>\n"
         content += "<iframe width='100%' height='100%' frameborder='0'\n"
-        content += "src='https://demo01.rallydev.com/slm/panel/html.sp?width=#{app_width_default}&panelOid=#{@panel_oid}&cpoid=#{@project_oid}&projectScopeUp=#{scope_up}&projectScopeDown=#{scope_down}&isEditable=true'></iframe>\n"
+        content += "src='#{@server}/slm/panel/html.sp?width=#{app_width_default}&panelOid=#{@panel_oid}&cpoid=#{@project_oid}&projectScopeUp=#{scope_up}&projectScopeDown=#{scope_down}&isEditable=true'></iframe>\n"
         content += "</body></html>"
         File.open(filename, "w") { |file| file.write(content) }
         puts "> Created #{filename}"
@@ -565,15 +565,17 @@ module Rally
                                                         "HTML_SDK1_BLOCK",
                                                         html_tpl,
                                                         debug,
-                                                        "VALUE",
-                                                        0)
+                                                        "VALUE")
+
+        # Indents are a bit different between SDK 1 and 2 files with Javascript blocks
+        js_indent = (@config.sdk_version.include? "1.") ? 1 : 3
 
         template = populate_template_with_resources(template,
                                                     "JAVASCRIPT_BLOCK",
                                                     @config.javascript,
                                                     debug,
                                                     "\"VALUE\"",
-                                                    3)
+                                                    js_indent)
 
         template = populate_template_with_resources(template,
                                                     "STYLE_BLOCK",
@@ -626,7 +628,7 @@ module Rally
             # This will replace the placeholder App SDK include in the template file
             if line.include? "src=\"/apps/"
               sdk_src_path = debug ? @config.sdk_debug_path : @config.sdk_path
-              line = "<script type =\"text/javascript\" src=\"#{sdk_src_path}\"></script>" + "\n"
+              line = "  " + "<script type =\"text/javascript\" src=\"#{sdk_src_path}\"></script>" + "\n"
             end
 
             tpl_file = tpl_file + line
@@ -634,24 +636,23 @@ module Rally
             # This will add in all other scripts from the config file immediately after the SDK include
             if line.include? "sdk.js"
               tpl_file += "  " + "JAVASCRIPT_DEBUG_BLOCK" + "\n" + "  " + "STYLE_BLOCK" + "\n" if debug
-              tpl_file += "  " + "<script type =\"text/javascript\">" + "\n" + "    " + "JAVASCRIPT_BLOCK" + "\n" + "  " + "</script>" + "\n\n" + "  " + "<style type=\"text/css\">" + "\n" + "    " + "STYLE_BLOCK" + "\n" + "  " + "</style>" + "\n" unless debug
+              tpl_file += "  " + "<script type =\"text/javascript\">" + "\n" + "JAVASCRIPT_BLOCK" + "\n" + "  " + "</script>" + "\n\n" + "  " + "<style type=\"text/css\">" + "\n" + "    " + "STYLE_BLOCK" + "\n" + "  " + "</style>" + "\n" unless debug
             end
           end
         end
         tpl_file
       end
 
-      def populate_html_template_with_resources(template, placeholder, string_tpl, debug, debug_tpl, indent_level)
+      def populate_html_template_with_resources(template, placeholder, string_tpl, debug, debug_tpl)
         block = ""
-        indent = "    " * indent_level
 
         if debug
-           block << "\n" << debug_tpl.gsub("VALUE"){string_tpl} << "\n"
+           block << "" << debug_tpl.gsub("VALUE"){string_tpl} << ""
         else
           lines = string_tpl.split("\n")
 
           lines.each do |line|
-            block << indent << line.to_s.gsub(/\\'/, "\\\\\\\\'") << "\n"
+            block << line.to_s.gsub(/\\'/, "\\\\\\\\'") << "\n"
           end
         end
 
@@ -692,6 +693,7 @@ module Rally
             gsub("APP_NAME", escape ? escape_single_quotes(@config.name) : @config.name).
             gsub("APP_TITLE", @config.name).
             gsub("APP_SDK_VERSION", @config.sdk_version).
+            gsub("APP_SERVER", @config.server).
             gsub("APP_SDK_PATH", debug ? @config.sdk_debug_path : @config.sdk_path).
             gsub("DEFAULT_APP_JS_FILE", list_to_quoted_string(@config.javascript)).
             gsub("DEFAULT_APP_CSS_FILE", list_to_quoted_string(@config.css)).
@@ -713,12 +715,13 @@ module Rally
 
     ## Simple object wrapping the configuration of an App
     class AppConfig
-      SDK_RELATIVE_URL = "/apps"
-      SDK_ABSOLUTE_URL = "https://rally1.rallydev.com/apps"
+      SDK_FILE = "sdk.js"
+      SDK_DEBUG_FILE = "sdk-debug.js"
+      DEFAULT_SERVER = "https://rally1.rallydev.com"
 
-      attr_reader :name, :sdk_version, :sdk_file, :sdk_debug_file
+      attr_reader :name, :sdk_version, :server, :sdk_file, :sdk_debug_file
       attr_accessor :javascript, :css, :class_name
-      attr_accessor :server, :username, :password, :project, :project_oid, :page_oid, :panel_oid
+      attr_accessor :deploy_server, :username, :password, :project, :project_oid, :page_oid, :panel_oid
 
       def self.from_config_file(config_file, deploy_file)
         unless File.exist? config_file
@@ -727,23 +730,31 @@ module Rally
 
         name = Rally::RallyJson.get(config_file, "name")
         sdk_version = Rally::RallyJson.get(config_file, "sdk")
+        server = Rally::RallyJson.get(config_file, "server")
         class_name = Rally::RallyJson.get(config_file, "className")
         javascript = Rally::RallyJson.get_array(config_file, "javascript")
         css = Rally::RallyJson.get_array(config_file, "css")
 
-        server = Rally::RallyJson.get(deploy_file, "server")
-        username = Rally::RallyJson.get(deploy_file, "username")
-        password = Rally::RallyJson.get(deploy_file, "password")
-        project_oid = Rally::RallyJson.get(deploy_file, "projectOid")
-        project = Rally::RallyJson.get(deploy_file, "project")
-        page_oid = Rally::RallyJson.get(deploy_file, "pageOid.cached")
-        panel_oid = Rally::RallyJson.get(deploy_file, "panelOid.cached")
+        if File.exist? deploy_file
+          deploy_server = Rally::RallyJson.get(deploy_file, "server")
+          username = Rally::RallyJson.get(deploy_file, "username")
+          password = Rally::RallyJson.get(deploy_file, "password")
+          project_oid = Rally::RallyJson.get(deploy_file, "projectOid")
+          project = Rally::RallyJson.get(deploy_file, "project")
+          page_oid = Rally::RallyJson.get(deploy_file, "pageOid.cached")
+          panel_oid = Rally::RallyJson.get(deploy_file, "panelOid.cached")
 
-        config = Rally::AppSdk::AppConfig.new(name, sdk_version, config_file, deploy_file)
+          raise "Error: Deploy server not found in deploy.json" if deploy_server.nil?
+          raise "Error: Username not found in deploy.json" if username.nil?
+          raise "Error: Password not found in deploy.json" if password.nil?
+          raise "Error: Project name or OID not found in deploy.json" if project_oid.nil? && project.nil?
+        end
+
+        config = Rally::AppSdk::AppConfig.new(name, sdk_version, server, config_file, deploy_file)
         config.javascript = javascript
         config.css = css
         config.class_name = class_name
-        config.server = server
+        config.deploy_server = deploy_server
         config.username = username
         config.password = password
         config.project_oid = project_oid
@@ -753,15 +764,21 @@ module Rally
         config
       end
 
-      def initialize(name, sdk_version, config_file = nil, deploy_file = nil)
+      def initialize(name, sdk_version, server = nil, config_file = nil, deploy_file = nil)
         @name = sanitize_string name
         @sdk_version = sdk_version
+        @server = set_https(server || DEFAULT_SERVER)
         @sdk_file = "sdk.js"
         @sdk_debug_file = (@sdk_version.include? "1.") ? "sdk.js?debug=true" : "sdk-debug.js" 
         @config_file = config_file
         @deploy_file = deploy_file
         @javascript = []
         @css = []
+       
+        if server.nil?
+          puts "Defaulting to: #{@server}"
+          puts "(!) You can specify \"server\": \"https://xxx.rallydev.com\" in config.json"
+        end
       end
 
       def javascript=(file)
@@ -811,12 +828,19 @@ module Rally
         end
       end
 
+      def deployable?
+        (File.exist? @deploy_file) \
+          && !@deploy_server.nil? && !@deploy_server.empty? \
+          && !@username.nil? && !@username.empty? \
+          && !@password.nil? && !@password.empty?
+      end
+
       def sdk_debug_path
-        "#{SDK_ABSOLUTE_URL}/#{@sdk_version}/#{@sdk_debug_file}"
+        "#{@server}/apps/#{@sdk_version}/#{@sdk_debug_file}"
       end
 
       def sdk_path
-        "#{SDK_RELATIVE_URL}/#{@sdk_version}/#{@sdk_file}"
+        "/apps/#{@sdk_version}/#{@sdk_file}"
       end
     end
   end
@@ -1037,6 +1061,7 @@ HTML_SDK1_BLOCK
 {
     "name": "APP_READABLE_NAME",
     "className": "CustomApp",
+    "server": "APP_SERVER",
     "sdk": "APP_SDK_VERSION",
     "javascript": [
         DEFAULT_APP_JS_FILE
@@ -1049,7 +1074,7 @@ HTML_SDK1_BLOCK
 
     DEPLOY_TPL = <<-END
 {
-    "server": "http://rally1.rallydev.com",
+    "server": "APP_SERVER",
     "username": "you@domain.com",
     "password": "S3cr3t",
     "project": "YourProject"
@@ -1073,6 +1098,8 @@ HTML_SDK1_BLOCK
 #{Rally::AppSdk::AppTemplateBuilder::HTML_DEBUG}
 # Ignore 'local' build version of App
 #{Rally::AppSdk::AppTemplateBuilder::HTML_LOCAL}
+#Ignore All hidden files.
+.*
     END
   end
 end
@@ -1096,4 +1123,15 @@ end
 
 def sanitize_string(value)
   value.gsub(/[^a-zA-Z0-9 \-_\.']/, "")
+end
+
+def set_https(uri)
+  prefix = uri.match('^(http(s?):(\/\/?))') ? '' : 'https://'
+
+  if uri =~ /\/\// and not prefix.empty? # schema given; force ours
+    uri.gsub!(/^.*\/\//, prefix)
+  else                                   # no schema given
+    uri = prefix + uri
+  end
+  uri
 end
