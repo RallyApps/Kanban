@@ -9,7 +9,7 @@ KanbanBoard = function(rallyDataSource, configShow) {
             columns, scheduleStatesMap,
             hideLastColumnIfReleased, showTaskCompletion, showDefectStatus,
             lastState, artifactTypes,
-            colorByArtifactType, policyCheckBox;
+            colorByArtifactType, policyCheckBox, showSla, showSlaFor, slaStart, slaEnd;
 
     that._showThroughputReport = function() {
         var config = {reportNumber: 180, reportName: "Throughput Report",
@@ -244,6 +244,11 @@ KanbanBoard = function(rallyDataSource, configShow) {
                 showTaskCompletion = kanbanInfo.showTaskCompletion;
                 showDefectStatus = kanbanInfo.showDefectStatus;
                 colorByArtifactType = kanbanInfo.colorByArtifactType;
+                showSla = kanbanInfo.showSla;
+                showSlaFor = kanbanInfo.showSlaFor;
+                slaStart = kanbanInfo.slaStart
+                slaEnd = kanbanInfo.slaEnd
+
                 if (kanbanInfo.showAge) {
                     showAgeAfter = kanbanInfo.showAgeAfter;
                 } else {
@@ -255,7 +260,7 @@ KanbanBoard = function(rallyDataSource, configShow) {
                     if (fieldInfo.displayField) {
                         columns[key] = that._getColumn(fieldInfo);
                         scheduleStatesMap[key] = fieldInfo.state;
-                        lastState = key;
+                        lastState = key;                        
                     }
                 });
 
@@ -271,14 +276,14 @@ KanbanBoard = function(rallyDataSource, configShow) {
     };
 
     that._onBeforeItemUpdated = function(c, args) {
-        if (args.type === "move") {
-
+        if (args.type === "move") {           
             args.fieldsToUpdate.Ready = false;
 
             if (scheduleStatesMap[args.fieldsToUpdate[args.attribute]]) {
-                args.fieldsToUpdate.ScheduleState = scheduleStatesMap[args.fieldsToUpdate[args.attribute]];
-            }
+                args.fieldsToUpdate.ScheduleState = scheduleStatesMap[args.fieldsToUpdate[args.attribute]];                
+            }           
         }
+
     };
 
     that._updateBoardWithFilter = function(dropdown) {
@@ -302,7 +307,11 @@ KanbanBoard = function(rallyDataSource, configShow) {
                     showTaskCompletion: showTaskCompletion,
                     showDefectStatus: showDefectStatus,
                     showAgeAfter: showAgeAfter,
-                    colorByArtifactType: colorByArtifactType
+                    colorByArtifactType: colorByArtifactType,
+                    showSla: showSla,
+                    showSlaFor: showSlaFor,
+                    slaStart: slaStart,
+                    slaEnd: slaEnd
                 },
                 columnRenderer  : KanbanColumnRenderer,
                 columns         : columns,

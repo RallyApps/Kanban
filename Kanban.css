@@ -173,6 +173,14 @@
     border: 3px solid #EF3F36;
 }
 
+.cardboard .pastsla {
+    border: 3px solid #EF3F36;
+}
+
+.cardboard .onedayofsla {
+    border: 3px solid #FFFF00;
+}
+
 .cardboard .cardContent .status {
     border-top: 1px dotted #ccc;
     margin-top: 5px;
@@ -180,6 +188,13 @@
 
 .cardboard .cardContent .status a {
     color: #666;
+}
+
+.slastatus {
+    background-repeat: no-repeat;
+    color: #666;
+    padding-top: 5px;    
+    line-height: 8px;    
 }
 
 .cardboard .cardContent .tasks, .defects {
