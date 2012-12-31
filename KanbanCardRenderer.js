@@ -322,8 +322,8 @@ KanbanCardRenderer = function(column, item, options) {
         return i;
     };
 
-    this.dateSlaDueDateMinusWeekends = function(dateSlaStared, sla){
-        var startDate = new Date(dateSlaStared);
+    this.dateSlaDueDateMinusWeekends = function(dateSlaStarted, sla){
+        var startDate = new Date(dateSlaStarted);
         
         var tempDate = new Date(startDate);
         var i = 1;
@@ -344,6 +344,7 @@ KanbanCardRenderer = function(column, item, options) {
     this.isAWorkDay = function(aDate){
         var SATURDAY = 6;
         var SUNDAY = 0;
+
         if(aDate.getDay() === SATURDAY || aDate.getDay() === SUNDAY){
             return false;
         }
