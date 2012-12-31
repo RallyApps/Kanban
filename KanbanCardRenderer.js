@@ -156,96 +156,96 @@ KanbanCardRenderer = function(column, item, options) {
         return rally.sdk.util.DateTime.getDifference(new Date(), lastUpdateDate, "day");
     };
     
-    this._getFullRallyItem = function(card){           
-        //Get the rally states so we can determine the order.
-        function callBack(itemObj){
-            getAllRevisions(itemObj);
-        }
+    //1. Get the possible rally schedule states so we can determine the position of this story in relation to the start and stop SLA states.
+    //2. Get the full rally object
+    //3. Get the revision history
+    //4. Run display logic    
+    this._getFullRallyItem = function(card){  
 
-        function getAllRevisions(itemObj){
-            var revHistRef = rally.sdk.util.Ref.getRef(itemObj.RevisionHistory);
-            
-            var rallyDataSource = new rally.sdk.data.RallyDataSource();
-            if(rallyScheduleStateOrder == null){
-                rallyDataSource.getRallyObject(revHistRef, function refCallBack(obj){getRallyScheduleStateOrder(card, itemObj, obj);}, errorCallBack); 
-            }
-            else{
-                rallyDataSource.getRallyObject(revHistRef, function refCallBack(obj){buildDueDateCall(rallyScheduleStateOrder, card, itemObj, obj);}, errorCallBack);                
-            }
-                    
-        }
-
-        function getRallyScheduleStateOrder(card, itemObj, revisions){
+        //1. Get the rally states so we can determine the order.
+        getRallyScheduleStateOrder();
+        
+        function getRallyScheduleStateOrder(){            
             var queryConfig = {type: 'Hierarchical Requirement',
                     key : 'storyStates', 
                     attribute: 'Schedule State',
                     order: 'Schedule State desc'
                     };
             var rallyDataSource = new rally.sdk.data.RallyDataSource();
-            rallyDataSource.find(queryConfig, function queryCallBack(obj){ rallyScheduleStateOrder=obj; buildDueDateCall(obj, card, itemObj, revisions);}, errorCallBack); 
+            rallyDataSource.find(queryConfig, function queryCallBack(obj){cardStateCheck(obj);}, errorCallBack); 
+        } 
+
+        function cardStateCheck(statesObj){           
+            var currentStateVal = that.getRallyStateVal(item.ScheduleState, statesObj.storyStates);
+            var startSlaTimerStateVal = that.getRallyStateVal(options.slaStart, statesObj.storyStates);
+            var stopSlaTimerStateVal = that.getRallyStateVal(options.slaEnd, statesObj.storyStates);
+
+            //If the user story has been accepted then return.
+            if(item.AcceptedDate != null && item.AcceptedDate != undefined){
+               return;
+            }   
+
+            //If the User story has reached (or is past) its stop SLA state then return.
+            if(options.slaEnd == item.ScheduleState || currentStateVal > stopSlaTimerStateVal){
+                return;
+            } 
+
+            /*
+              If the User Story is not currently in a state that is less than its start sla then return.
+              The scenario here is if a user story has been moved beyond its start sla state but has subsequently moved back.
+            */
+            if(currentStateVal < startSlaTimerStateVal){
+                return;
+            }
+
+            getFullRallyItem();
+        }
+
+        //Get the full rally item.
+        function getFullRallyItem(){
+            var itemRef = rally.sdk.util.Ref.getRef(item);        
+            var rallyDataSource = new rally.sdk.data.RallyDataSource();
+            rallyDataSource.getRallyObject(itemRef, callBack, errorCallBack);
+        }
+        
+        function callBack(itemObj){
+            getAllRevisions(itemObj);
+        }
+
+        function getAllRevisions(itemObj){
+            var revHistRef = rally.sdk.util.Ref.getRef(itemObj.RevisionHistory);            
+            var rallyDataSource = new rally.sdk.data.RallyDataSource();
+            
+            rallyDataSource.getRallyObject(revHistRef, function refCallBack(obj){buildDueDateCall(card, itemObj, obj);}, errorCallBack);
         }
 
         //Build the SLA logic.
-        function buildDueDateCall(obj, card, itemObj, revisions){            
-            that._getDueDate(card, itemObj, obj, revisions);
+        function buildDueDateCall(card, itemObj, revisions){
+            that._getDueDate(card, itemObj, revisions);
         }
 
         function errorCallBack(response){           
             console.log("ERROR!!!!!  " + JSON.stringify(response));
         }
 
-        //Get the full rally item.
-        var itemRef = rally.sdk.util.Ref.getRef(item);        
-        var rallyDataSource = new rally.sdk.data.RallyDataSource();
-        rallyDataSource.getRallyObject(itemRef, callBack, errorCallBack);
-
     };
 
-    this._getDueDate = function(card, itemObj, queryObj, revisionObj) {
-        
-        var userStory = itemObj;
-        var revHist = revisionObj;        
-        var possibleStoryStates = queryObj.storyStates;
-
-        function getRallyStateVal(rallyState){            
-            for(var i = 0;i < possibleStoryStates.length;i++){
-                if(rallyState == possibleStoryStates[i]){
-                    return i;
-                }
+    this.getRallyStateVal = function(rallyState, storyStates){                
+        for(var i = 0;i < storyStates.length;i++){
+            if(rallyState == storyStates[i]){
+                return i;
             }
-            return NaN;
         }
+        return NaN;
+    };
 
+    this._getDueDate = function(card, itemObj, revisionObj) {
+        
+        //var userStory = itemObj;
+        var revHist = revisionObj;        
+        
         var sla = options.showSlaFor;
         var startSlaTimerState = options.slaStart;
-        var stopSlaTimerState = options.slaEnd;
-        var currentState = userStory.ScheduleState;
-        var kanbanState = userStory.KanbanState;
-
-        var currentStateVal = getRallyStateVal(currentState);
-        var startSlaTimerStateVal = getRallyStateVal(startSlaTimerState);
-        var stopSlaTimerStateVal = getRallyStateVal(stopSlaTimerState);
-
-        var inProgressDate = userStory.InProgressDate;
-        var acceptedDate = userStory.AcceptedDate;
-
-        //If the user story has been accepted then return.
-        if(userStory.AcceptedDate != null && userStory.AcceptedDate != undefined){
-           return;
-        }   
-
-        //If the User story has reached (or is past) its stop SLA state then return.
-        if(stopSlaTimerState == currentState || currentStateVal > stopSlaTimerStateVal){
-            return;
-        } 
-
-        /*
-          If the User Story is not currently in a state that is less than its start sla then return.
-          The scenario here is if a user story has been moved beyond its start sla state but has subsequently moved back.
-        */
-        if(currentStateVal < startSlaTimerStateVal){
-            return;
-        }       
 
         //Determine if this user story has entered the SLA start date if so capture the date it entered.
         //TODO: Handle if a story has a revision indicating that the story has entered or past the SLA start state but has since moved back to the "Backlog"
@@ -471,8 +471,8 @@ KanbanCardRenderer = function(column, item, options) {
         }
 
          //Run Due Date Logic        
-        if (options && options.showSla) {           
-            that._getFullRallyItem(card);
+        if (options && options.showSla) {            
+            that._getFullRallyItem(card);            
         }        
     };
 
