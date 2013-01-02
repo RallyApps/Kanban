@@ -471,7 +471,7 @@ KanbanCardRenderer = function(column, item, options) {
         }
 
          //Run Due Date Logic        
-        if (options && options.showSla && !options.attribute)) {            
+        if (options && options.showSla && !options.attribute) {            
             that._getFullRallyItem(card);            
         }        
     };
