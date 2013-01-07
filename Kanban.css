@@ -174,11 +174,11 @@
 }
 
 .cardboard .pastsla {
-    border: 3px solid #EF3F36;
+    color: #EF3F36;    
 }
 
 .cardboard .onedayofsla {
-    border: 3px solid #FFFF00;
+    color: #FFFF00;
 }
 
 .cardboard .cardContent .status {

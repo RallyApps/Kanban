@@ -198,30 +198,26 @@ KanbanCardRenderer = function(column, item, options) {
                 return;
             }
 
-            getFullRallyItem();
+            getFullRallyItem(statesObj);
         }
 
         //Get the full rally item.
-        function getFullRallyItem(){
+        function getFullRallyItem(statesObj){
             var itemRef = rally.sdk.util.Ref.getRef(item);        
             var rallyDataSource = new rally.sdk.data.RallyDataSource();
-            rallyDataSource.getRallyObject(itemRef, callBack, errorCallBack);
-        }
-        
-        function callBack(itemObj){
-            getAllRevisions(itemObj);
+            rallyDataSource.getRallyObject(itemRef, function callBack(obj){getAllRevisions(obj, statesObj);}, errorCallBack);
         }
 
-        function getAllRevisions(itemObj){
+        function getAllRevisions(itemObj, statesObj){
             var revHistRef = rally.sdk.util.Ref.getRef(itemObj.RevisionHistory);            
             var rallyDataSource = new rally.sdk.data.RallyDataSource();
             
-            rallyDataSource.getRallyObject(revHistRef, function refCallBack(obj){buildDueDateCall(card, itemObj, obj);}, errorCallBack);
+            rallyDataSource.getRallyObject(revHistRef, function refCallBack(obj){buildDueDateCall(card, itemObj, obj, statesObj);}, errorCallBack);
         }
 
         //Build the SLA logic.
-        function buildDueDateCall(card, itemObj, revisions){
-            that._getDueDate(card, itemObj, revisions);
+        function buildDueDateCall(card, itemObj, revisions, statesObj){
+            that._getDueDate(card, itemObj, revisions, statesObj);
         }
 
         function errorCallBack(response){           
@@ -239,7 +235,7 @@ KanbanCardRenderer = function(column, item, options) {
         return NaN;
     };
 
-    this._getDueDate = function(card, itemObj, revisionObj) {
+    this._getDueDate = function(card, itemObj, revisionObj, statesObj) {
         
         //var userStory = itemObj;
         var revHist = revisionObj;        
@@ -257,7 +253,16 @@ KanbanCardRenderer = function(column, item, options) {
                 if (dueDateStartChangeDate.length === 0) {
                     if (revision.Description.indexOf("SCHEDULE STATE changed from") !== -1 && revision.Description.indexOf(" to [" + startSlaTimerState + "]") !== -1) {
 
-                        dueDateStartChangeDate = revision.CreationDate;                                            
+                        var descr = revision.Description;
+                        descr = descr.slice(descr.indexOf("SCHEDULE STATE changed from ["), -1).replace("SCHEDULE STATE changed from [", "");                        
+                        descr = descr.slice(0,descr.indexOf("]"));
+
+                        if(that.getRallyStateVal(descr, statesObj.storyStates) > that.getRallyStateVal(startSlaTimerState, statesObj.storyStates)){
+                            //Do nothing because someone has moved a card back to the starting state and it is still on the board but we want to take the earlier time.
+                        }
+                        else{
+                            dueDateStartChangeDate = revision.CreationDate;
+                        }                                       
                     }                    
                 }               
             }
@@ -281,34 +286,54 @@ KanbanCardRenderer = function(column, item, options) {
         var dueDateDiff = rally.sdk.util.DateTime.getDifference(cardDueDate, new Date(), "day");
         
         //If the diff is negative we are past the due date.
-        if(dueDateDiff < 0){                       
-            dojo.addClass(card, "pastsla");                      
-            var pastSLATextNode = document.createTextNode("This Card is past its SLA of " + sla + " day(s).");
-            var wasDueOnTextNode = document.createTextNode("This Card was due on: " + cardDueDate.toDateString());
-            that.createSlaDiv(card).appendChild(pastSLATextNode);
-            that.createSlaDiv(card).appendChild(wasDueOnTextNode);
+        if(dueDateDiff < 0){            
+            var pastSLATextNode = document.createTextNode("Due Date: " + cardDueDate.toDateString());            
+            var slaDiv = that.createSlaDiv(card);
+            slaDiv.appendChild(pastSLATextNode);            
+            dojo.addClass(slaDiv, "pastsla");
+           
+            var tooltip = new rally.sdk.ui.basic.Tooltip({
+                message: "This Card is past its SLA of " + sla + " day(s).",
+                position: "below"
+            });
+            tooltip.display(dojo.query('.slastatus', card)[0]);
+
             return;
         }
         else if(dueDateDiff === 0 || dueDateDiff === 1){           
-            dojo.addClass(card, "onedayofsla");                
-            var pastSLATextNode = document.createTextNode("This Card is within one day of its SLA.");
-            var isDueOnTextNode = document.createTextNode("This Card is due on: " + cardDueDate.toDateString());
-            that.createSlaDiv(card).appendChild(pastSLATextNode);
-            that.createSlaDiv(card).appendChild(isDueOnTextNode);
+                       
+            var onedaySLATextNode = document.createTextNode("Due Date: " + cardDueDate.toDateString());
+            var slaDiv = that.createSlaDiv(card);
+            slaDiv.appendChild(onedaySLATextNode);
+            dojo.addClass(slaDiv, "pastsla");
+
+            var tooltip = new rally.sdk.ui.basic.Tooltip({
+                message: "This Card is within one day of its SLA.",
+                position: "below"
+            });
+
+            tooltip.display(dojo.query('.slastatus', card)[0]);
             return;
         }
-        else if(dueDateDiff > 1){
-            var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, new Date());
-            var msg = function(wrkDays){if(wrkDays > 1 || wrkDays === 0){return " days on the board.";}else{return " day on the board.";}}
-            var daysOnBoard = document.createTextNode(wrkDays + msg(wrkDays));
+        else if(dueDateDiff > 1){                       
+            var daysOnBoard = document.createTextNode("Due Date: " + cardDueDate.toDateString());
             that.createSlaDiv(card).appendChild(daysOnBoard);
+
+            var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, new Date());
+            var msg = function(wrkDays){if(wrkDays > 1){return wrkDays + " days on the board.";}else if(wrkDays === 1 || wrkDays === 0){return "This card was pulled today.";}}
+            var tooltip = new rally.sdk.ui.basic.Tooltip({
+                message: msg(wrkDays),
+                position: "below"
+            });
+            tooltip.display(dojo.query('.slastatus', card)[0]);
+
             return;
         }        
     };
 
     this.calcNumOfWrkDaysBetweenTwoDates = function(startDate, endDate){
         var tempDate = new Date(startDate);
-        var i = 0;
+        var i = 1; //Inclusive rekoning
         while(tempDate < endDate){    
             if(!that.isAWorkDay(tempDate)){
                 //Increment the date but, DO NOT increment the counter!
