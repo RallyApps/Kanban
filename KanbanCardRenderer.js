@@ -323,11 +323,13 @@ KanbanCardRenderer = function(column, item, options) {
 
         var cardDueDate = that.dateSlaDueDateMinusWeekends(slaStartDate, sla);
         var dueDateDiff = rally.sdk.util.DateTime.getDifference(cardDueDate, today, "day");
+
+        var formattedDate = rally.sdk.util.DateTime.format(cardDueDate, "EEE MMM dd");
         
         //If the diff is negative we are past the due date.
         if(dueDateDiff < 0){
             var daysPast = that.calcNumOfWrkDaysBetweenTwoDates(cardDueDate, new Date());               
-            var pastSLATextNode = document.createTextNode("SLA: " + daysPast + " " + getDayOrDays(daysPast) + " past (Due: " + rally.sdk.util.DateTime.format(cardDueDate, "EEE MMM dd") + ")");            
+            var pastSLATextNode = document.createTextNode("SLA: " + daysPast + " " + getDayOrDays(daysPast) + " past (Due: " + formattedDate + ")");            
             var slaDiv = that.createSlaDiv(card);
             slaDiv.appendChild(pastSLATextNode);            
             dojo.addClass(slaDiv, "pastsla");
@@ -338,11 +340,22 @@ KanbanCardRenderer = function(column, item, options) {
 
             return;
         }
-        else if(dueDateDiff === 0 || dueDateDiff === 1){
-            console.log("dueDateDiff - " + dueDateDiff);
-            console.log("slaStartDate - " + slaStartDate);
-            console.log("cardDueDate - " + cardDueDate);
-            var onedaySLATextNode = document.createTextNode("SLA: " + dueDateDiff + " " + getDayOrDays(dueDateDiff) + " left (Due: " + rally.sdk.util.DateTime.format(cardDueDate, "EEE MMM dd") + ")"); 
+        else if(dueDateDiff === 1){
+            var onedaySLATextNode = document.createTextNode("SLA: " + dueDateDiff + " " + getDayOrDays(dueDateDiff) + " left (Due: " + formattedDate + ")"); 
+
+            var slaDiv = that.createSlaDiv(card);
+            slaDiv.appendChild(onedaySLATextNode);
+            dojo.addClass(slaDiv, "pastsla");
+
+            var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, new Date());
+            var msg = getWrkDayMsg(wrkDays);
+            var elem = dojo.query('.slastatus', card)[0];
+            addToolTip(elem, msg);
+
+            return;
+        }
+        else if(dueDateDiff === 0){
+            var onedaySLATextNode = document.createTextNode("SLA: DUE TODAY (" + formattedDate + ")"); 
 
             var slaDiv = that.createSlaDiv(card);
             slaDiv.appendChild(onedaySLATextNode);
@@ -356,7 +369,7 @@ KanbanCardRenderer = function(column, item, options) {
             return;
         }
         else if(dueDateDiff > 1){                       
-            var daysOnBoard = document.createTextNode("SLA: " + dueDateDiff + " " + getDayOrDays(dueDateDiff) + " left (Due: " + rally.sdk.util.DateTime.format(cardDueDate, "EEE MMM dd") + ")");
+            var daysOnBoard = document.createTextNode("SLA: " + dueDateDiff + " " + getDayOrDays(dueDateDiff) + " left (Due: " + formattedDate + ")");
             that.createSlaDiv(card).appendChild(daysOnBoard);
 
             var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, new Date());
