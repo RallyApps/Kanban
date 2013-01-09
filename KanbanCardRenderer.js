@@ -244,7 +244,6 @@ KanbanCardRenderer = function(column, item, options) {
         var startSlaTimerState = options.slaStart;
 
         //Determine if this user story has entered the SLA start date if so capture the date it entered.
-        //TODO: Handle if a story has a revision indicating that the story has entered or past the SLA start state but has since moved back to the "Backlog"
         function getSlaStartStateChange() {            
             var dueDateStartChangeDate = "";
             var revisions = revHist.Revisions;           
@@ -315,9 +314,15 @@ KanbanCardRenderer = function(column, item, options) {
         //set the sla start date to the beginning of the day
         slaStartDate.setHours(00);
         slaStartDate.setMinutes(00);
-        
+        slaStartDate.setSeconds(00);
+         
+        var today = new Date();
+        today.setHours(00);
+        today.setMinutes(00);
+        today.setSeconds(00);
+
         var cardDueDate = that.dateSlaDueDateMinusWeekends(slaStartDate, sla);
-        var dueDateDiff = rally.sdk.util.DateTime.getDifference(cardDueDate, new Date(), "day");
+        var dueDateDiff = rally.sdk.util.DateTime.getDifference(cardDueDate, today, "day");
         
         //If the diff is negative we are past the due date.
         if(dueDateDiff < 0){
@@ -334,7 +339,9 @@ KanbanCardRenderer = function(column, item, options) {
             return;
         }
         else if(dueDateDiff === 0 || dueDateDiff === 1){
-
+            console.log("dueDateDiff - " + dueDateDiff);
+            console.log("slaStartDate - " + slaStartDate);
+            console.log("cardDueDate - " + cardDueDate);
             var onedaySLATextNode = document.createTextNode("SLA: " + dueDateDiff + " " + getDayOrDays(dueDateDiff) + " left (Due: " + rally.sdk.util.DateTime.format(cardDueDate, "EEE MMM dd") + ")"); 
 
             var slaDiv = that.createSlaDiv(card);
