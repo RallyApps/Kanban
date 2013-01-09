@@ -297,102 +297,104 @@ KanbanCardRenderer = function(column, item, options) {
             tooltip.display(elem);
         }
 
+        function significantDateFormater(date) {
+            date.setHours(00);
+            date.setMinutes(00);
+            date.setSeconds(00);
+            date.setMilliseconds(000);
+            return date;
+        }
 
-        var slaStartDate = getSlaStartStateChange();        
+
+        var slaStartDate = getSlaStartStateChange();
         /*
-            Sometimes the state of an item does not reflect its actual state.
-            For intance: If someone creates a user story and sets the state to "Defined".
-            Then there will be no revision history of the item moving into the Rally state we are looking for.
-            Maybe we ought to display a message?
+        Sometimes the state of an item does not reflect its actual state.
+        For intance: If someone creates a user story and sets the state to "Defined".
+        Then there will be no revision history of the item moving into the Rally state we are looking for.
+        Maybe we ought to display a message?
         */
-        if(slaStartDate === ""){
+        if (slaStartDate === "") {
             return;
         }
 
         slaStartDate = rally.sdk.util.DateTime.fromIsoString(slaStartDate);
 
         //set the sla start date to the beginning of the day
-        slaStartDate.setHours(00);
-        slaStartDate.setMinutes(00);
-        slaStartDate.setSeconds(00);
-         
-        var today = new Date();
-        today.setHours(00);
-        today.setMinutes(00);
-        today.setSeconds(00);
-
+        slaStartDate = significantDateFormater(slaStartDate);       
+        var today = significantDateFormater(new Date());
+        
         var cardDueDate = that.dateSlaDueDateMinusWeekends(slaStartDate, sla);
         var dueDateDiff = rally.sdk.util.DateTime.getDifference(cardDueDate, today, "day");
 
         var formattedDate = rally.sdk.util.DateTime.format(cardDueDate, "EEE MMM dd");
-        
+
         //If the diff is negative we are past the due date.
-        if(dueDateDiff < 0){
-            var daysPast = that.calcNumOfWrkDaysBetweenTwoDates(cardDueDate, new Date());               
-            var pastSLATextNode = document.createTextNode("SLA: " + daysPast + " " + getDayOrDays(daysPast) + " past (Due: " + formattedDate + ")");            
+        if (dueDateDiff < 0) {
+            var daysPast = that.calcNumOfWrkDaysBetweenTwoDates(cardDueDate, today);
+            var pastSLATextNode = document.createTextNode("SLA: " + daysPast + " " + getDayOrDays(daysPast) + " past (Due: " + formattedDate + ")");
             var slaDiv = that.createSlaDiv(card);
-            slaDiv.appendChild(pastSLATextNode);            
+            slaDiv.appendChild(pastSLATextNode);
             dojo.addClass(slaDiv, "pastsla");
-           
+
             var msg = "This Card is past its SLA of " + sla + " day(s)."
             var elem = dojo.query('.slastatus', card)[0];
             addToolTip(elem, msg);
 
             return;
         }
-        else if(dueDateDiff === 1){
-            var onedaySLATextNode = document.createTextNode("SLA: " + dueDateDiff + " " + getDayOrDays(dueDateDiff) + " left (Due: " + formattedDate + ")"); 
+        else if (dueDateDiff === 1) {
+            var onedaySLATextNode = document.createTextNode("SLA: " + dueDateDiff + " " + getDayOrDays(dueDateDiff) + " left (Due: " + formattedDate + ")");
 
             var slaDiv = that.createSlaDiv(card);
             slaDiv.appendChild(onedaySLATextNode);
             dojo.addClass(slaDiv, "pastsla");
 
-            var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, new Date());
+            var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, today);
             var msg = getWrkDayMsg(wrkDays);
             var elem = dojo.query('.slastatus', card)[0];
             addToolTip(elem, msg);
 
             return;
         }
-        else if(dueDateDiff === 0){
-            var onedaySLATextNode = document.createTextNode("SLA: DUE TODAY (" + formattedDate + ")"); 
+        else if (dueDateDiff === 0) {
+            var onedaySLATextNode = document.createTextNode("SLA: DUE TODAY (" + formattedDate + ")");
 
             var slaDiv = that.createSlaDiv(card);
             slaDiv.appendChild(onedaySLATextNode);
             dojo.addClass(slaDiv, "pastsla");
 
-            var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, new Date());
+            var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, today);
             var msg = getWrkDayMsg(wrkDays);
             var elem = dojo.query('.slastatus', card)[0];
             addToolTip(elem, msg);
 
             return;
         }
-        else if(dueDateDiff > 1){                       
+        else if (dueDateDiff > 1) {
             var daysOnBoard = document.createTextNode("SLA: " + dueDateDiff + " " + getDayOrDays(dueDateDiff) + " left (Due: " + formattedDate + ")");
             that.createSlaDiv(card).appendChild(daysOnBoard);
 
-            var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, new Date());
+            var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, today);
             var msg = getWrkDayMsg(wrkDays);
             var elem = dojo.query('.slastatus', card)[0];
             addToolTip(elem, msg);
 
             return;
-        }        
+        }
     };
 
-    this.calcNumOfWrkDaysBetweenTwoDates = function(startDate, endDate){
+    this.calcNumOfWrkDaysBetweenTwoDates = function (startDate, endDate) {        
         var tempDate = new Date(startDate);
         var i = 0;
-        while(tempDate < endDate){    
-            if(!that.isAWorkDay(tempDate)){
+        while (tempDate.getTime() < endDate.getTime()) {            
+            if (!that.isAWorkDay(tempDate)) {
                 //Increment the date but, DO NOT increment the counter!
                 tempDate = new Date(tempDate.setDate(tempDate.getDate() + 1));
             }
-            else{
-                tempDate = new Date(tempDate.setDate(tempDate.getDate() + 1));                
+            else {
+                tempDate = new Date(tempDate.setDate(tempDate.getDate() + 1));
                 i++;
-            }            
+            }
         }
         return i;
     };
