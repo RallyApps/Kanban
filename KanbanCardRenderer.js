@@ -330,7 +330,7 @@ KanbanCardRenderer = function(column, item, options) {
 
         //If the diff is negative we are past the due date.
         if (dueDateDiff < 0) {
-            var daysPast = that.calcNumOfWrkDaysBetweenTwoDates(cardDueDate, today);
+            var daysPast = that.calcNumOfWrkDaysBetweenTwoDates(cardDueDate, today, true);
             var pastSLATextNode = document.createTextNode("SLA: " + daysPast + " " + getDayOrDays(daysPast) + " past (Due: " + formattedDate + ")");
             var slaDiv = that.createSlaDiv(card);
             slaDiv.appendChild(pastSLATextNode);
@@ -349,7 +349,7 @@ KanbanCardRenderer = function(column, item, options) {
             slaDiv.appendChild(onedaySLATextNode);
             dojo.addClass(slaDiv, "pastsla");
 
-            var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, today);
+            var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, today, false);
             var msg = getWrkDayMsg(wrkDays);
             var elem = dojo.query('.slastatus', card)[0];
             addToolTip(elem, msg);
@@ -363,7 +363,7 @@ KanbanCardRenderer = function(column, item, options) {
             slaDiv.appendChild(onedaySLATextNode);
             dojo.addClass(slaDiv, "pastsla");
 
-            var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, today);
+            var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, today, false);
             var msg = getWrkDayMsg(wrkDays);
             var elem = dojo.query('.slastatus', card)[0];
             addToolTip(elem, msg);
@@ -371,10 +371,11 @@ KanbanCardRenderer = function(column, item, options) {
             return;
         }
         else if (dueDateDiff > 1) {
-            var daysOnBoard = document.createTextNode("SLA: " + dueDateDiff + " " + getDayOrDays(dueDateDiff) + " left (Due: " + formattedDate + ")");
+			var daysLeft = that.calcNumOfWrkDaysBetweenTwoDates(today, cardDueDate, false);
+            var daysOnBoard = document.createTextNode("SLA: " + daysLeft + " " + getDayOrDays(daysLeft) + " left (Due: " + formattedDate + ")");
             that.createSlaDiv(card).appendChild(daysOnBoard);
 
-            var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, today);
+            var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, today, false);
             var msg = getWrkDayMsg(wrkDays);
             var elem = dojo.query('.slastatus', card)[0];
             addToolTip(elem, msg);
@@ -383,9 +384,15 @@ KanbanCardRenderer = function(column, item, options) {
         }
     };
 
-    this.calcNumOfWrkDaysBetweenTwoDates = function (startDate, endDate) {        
-        var tempDate = new Date(startDate);
-        var i = 0;
+    this.calcNumOfWrkDaysBetweenTwoDates = function (startDate, endDate, inclusive) {        
+        var tempDate = new Date(startDate);        
+		var i;
+		if(inclusive){
+			i = 0;
+		}
+		else{
+			i = 1;
+		}
         while (tempDate.getTime() < endDate.getTime()) {            
             if (!that.isAWorkDay(tempDate)) {
                 //Increment the date but, DO NOT increment the counter!
