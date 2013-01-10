@@ -36,15 +36,15 @@ describe("KanbanCardRenderer", function() {
     var dec24 = new Date(2012, 11, 24);
     var dec25 = new Date(2012, 11, 25);
     var dec27 = new Date(2012, 11, 27);
-    expect(cardRenderer.calcNumOfWrkDaysBetweenTwoDates(dec25, dec24)).toBe(0);
-    expect(cardRenderer.calcNumOfWrkDaysBetweenTwoDates(dec25, dec25)).toBe(0);
-    expect(cardRenderer.calcNumOfWrkDaysBetweenTwoDates(dec25, dec27)).toBe(2);
+    expect(cardRenderer.calcNumOfWrkDaysBetweenTwoDates(dec25, dec24)).toBe(1);
+    expect(cardRenderer.calcNumOfWrkDaysBetweenTwoDates(dec25, dec25)).toBe(1);
+    expect(cardRenderer.calcNumOfWrkDaysBetweenTwoDates(dec25, dec27)).toBe(3);
   });
 
   it("shall correctly calculate the number of days between two dates (over weekends)", function() {
     var dec25 = new Date(2012, 11, 25);
     var jan1 = new Date(2013, 0, 1);
-    expect(cardRenderer.calcNumOfWrkDaysBetweenTwoDates(dec25, jan1)).toBe(5);
+    expect(cardRenderer.calcNumOfWrkDaysBetweenTwoDates(dec25, jan1)).toBe(6);
   });
 
 });
