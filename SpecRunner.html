@@ -1,0 +1,95 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+  "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+  <title>Jasmine Test Runner</title>
+  <link rel="stylesheet" type="text/css" href="lib/jasmine-1.1.0.rc1/jasmine.css"></link>
+  <script type="text/javascript" src="lib/jasmine-1.1.0.rc1/jasmine.js"></script>
+  <script type="text/javascript" src="lib/jasmine-1.1.0.rc1/jasmine-html.js"></script>
+  <script type="text/javascript" src="lib/jasmine.console_reporter.js"></script>
+  <script type="text/javascript" src="lib/jasmine.junit_reporter.js"></script>
+  <script type="text/javascript" src="lib/jsmockito-1.0.4.js"></script>
+
+  <!-- include source files here... -->
+  <script type ="text/javascript" src="https://rally1.rallydev.com/apps/1.32/sdk.js?debug=true"></script>
+  <script type="text/javascript" src="Kanban.js"></script>
+  <script type="text/javascript" src="KanbanCardRenderer.js"></script>
+  <script type="text/javascript" src="KanbanColumnRenderer.js"></script>
+  <script type="text/javascript" src="KanbanConfig.js"></script>
+  <script type="text/javascript" src="KanbanPolicy.js"></script>
+  <script type="text/javascript" src="KanbanReport.js"></script>
+
+    
+    <script type="text/javascript">
+        //this function will help us by getting our default project and workspace to help with external kanban development.
+        var WORKSPACE_OID,PROJECT_OID,PROJECT_SCOPE_UP,PROJECT_SCOPE_DOWN;
+        function projectParser(response) {
+            var meta = response.QueryResult.Meta;
+            var numberYankingRegex = /[^\d]/g;
+            WORKSPACE_OID = 1089940337; // meta.workspace.replace(numberYankingRegex, '');
+            PROJECT_OID = 6512656459; // meta.project.replace(numberYankingRegex, '');
+        }
+    </script>
+
+    <script type="text/javascript"
+            src="https://rally1.rallydev.com/slm/webservice/1.32/artifact.js?projectScopeUp=false&projectScopeDown=false&pagesize=1&jsonp=projectParser&includeMeta=true"></script>
+    
+    <script type="text/javascript">
+        var projectOid = '__PROJECT_OID__';
+        projectOid = projectOid.indexOf("__") !== -1 ? PROJECT_OID : projectOid;
+        var workspaceOid = '__WORKSPACE_OID__';
+        workspaceOid = workspaceOid.indexOf("__") !== -1 ? WORKSPACE_OID : workspaceOid;
+        var projectScopeUp = '__PROJECT_SCOPING_UP__';
+        projectScopeUp = projectScopeUp.indexOf("__") !== -1 ? PROJECT_SCOPE_UP : projectScopeUp;
+        var projectScopeDown = '__PROJECT_SCOPING_DOWN__';
+        projectScopeDown = projectScopeDown.indexOf("__") !== -1 ? PROJECT_SCOPE_DOWN : projectScopeDown;
+
+        function onLoad() {
+
+            var rallyDataSource = new rally.sdk.data.RallyDataSource(workspaceOid,
+                    projectOid, projectScopeUp, projectScopeDown);
+
+            rallyDataSource.projectOid = projectOid;
+            rallyDataSource.workspaceOid = workspaceOid;
+            rallyDataSource.projectScopeUp = projectScopeUp;
+            rallyDataSource.projectScopeDown = projectScopeDown;
+
+            var config, kanbanBoard;
+
+            function configShow() {
+                if (!config) {
+                    config = new KanbanConfigPanel(rallyDataSource, kanbanBoard._redisplayBoard);
+                    config.display();
+                }
+                else {
+                    config.show();
+                }
+            }
+
+            rally.sdk.ui.AppHeader.addPageTool({
+                key:"showConfig",
+                label: "Settings...",
+                onClick: configShow
+            });
+            kanbanBoard = new KanbanBoard(rallyDataSource, configShow);
+            kanbanBoard.display(dojo.body());
+
+        }
+        rally.addOnLoad(onLoad);
+    </script>
+
+  <!-- include spec files here... -->
+  <script type="text/javascript" src="test/spec/SpecHelper.js"></script>
+  <script type="text/javascript" src="test/spec/KanbanCardRendererSpec.js"></script>
+
+</head>
+<body>
+
+<script type="text/javascript">
+  jasmine.getEnv().addReporter(new jasmine.ConsoleReporter());
+  jasmine.getEnv().addReporter(new jasmine.TrivialReporter());
+  jasmine.getEnv().execute();
+</script>
+
+</body>
+</html>

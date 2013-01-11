@@ -47,6 +47,14 @@ desc "Deploy an app to a Rally server"
 task :deploy => ["deploy:app"] do
 end
 
+desc "Run test specs"
+task :test do
+  Dir.chdir(Rake.original_dir)
+  puts("--- Running tests ---")
+  result = %x{java -jar lib/js.jar -opt -1 lib/envjs.bootstrap.js SpecRunner.html}
+  puts(result)
+end
+
 namespace "deploy" do
   # wrapped with top-level 'deploy' target as a convenience
   task :app => ["rake:build"] do

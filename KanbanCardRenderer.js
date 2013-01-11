@@ -1,5 +1,7 @@
+var rallyScheduleStateOrder = null;
+
 KanbanCardRenderer = function(column, item, options) {
-    rally.sdk.ui.cardboard.BasicCardRenderer.call(this, column, item, options);
+    rally.sdk.ui.cardboard.BasicCardRenderer.call(this, column, item, options);    
     var that = this;
     var cardContent,card,cardMenu;
     this.getItem = function() {
@@ -134,9 +136,9 @@ KanbanCardRenderer = function(column, item, options) {
             var lastStateChangeDate = "";
 
             rally.forEach(revisions, function(revision) {
-                if (lastStateChangeDate.length === 0) {
-                    var attr = options.attribute.toUpperCase();
 
+                if (lastStateChangeDate.length === 0) {
+                    var attr = options.attribute.toUpperCase();                    
                     if (revision.Description.indexOf(attr + " changed from") !== -1) {
                         lastStateChangeDate = revision.CreationDate;
                     }
@@ -150,13 +152,302 @@ KanbanCardRenderer = function(column, item, options) {
 
         var lastStateDate = getLastStateChange();
 
-        var lastUpdateDate = rally.sdk.util.DateTime.fromIsoString(lastStateDate);
+        var lastUpdateDate = rally.sdk.util.DateTime.fromIsoString(lastStateDate);        
         return rally.sdk.util.DateTime.getDifference(new Date(), lastUpdateDate, "day");
+    };
+    
+    //1. Get the possible rally schedule states so we can determine the position of this story in relation to the start and stop SLA states.
+    //2. Get the full rally object
+    //3. Get the revision history
+    //4. Run display logic    
+    this._getFullRallyItem = function(card){  
+
+        //1. Get the rally states so we can determine the order.
+        getRallyScheduleStateOrder();
+        
+        function getRallyScheduleStateOrder(){            
+            var queryConfig = {type: 'Hierarchical Requirement',
+                    key : 'storyStates', 
+                    attribute: 'Schedule State',
+                    order: 'Schedule State desc'
+                    };
+            var rallyDataSource = new rally.sdk.data.RallyDataSource();
+            rallyDataSource.find(queryConfig, function queryCallBack(obj){cardStateCheck(obj);}, errorCallBack); 
+        } 
+
+        function cardStateCheck(statesObj){           
+            var currentStateVal = that.getRallyStateVal(item.ScheduleState, statesObj.storyStates);
+            var startSlaTimerStateVal = that.getRallyStateVal(options.slaStart, statesObj.storyStates);
+            var stopSlaTimerStateVal = that.getRallyStateVal(options.slaEnd, statesObj.storyStates);
+
+            //If the user story has been accepted then return.
+            if(item.AcceptedDate != null && item.AcceptedDate != undefined){
+               return;
+            }   
+
+            //If the User story has reached (or is past) its stop SLA state then return.
+            if(options.slaEnd == item.ScheduleState || currentStateVal > stopSlaTimerStateVal){
+                return;
+            } 
+
+            /*
+              If the User Story is not currently in a state that is less than its start sla then return.
+              The scenario here is if a user story has been moved beyond its start sla state but has subsequently moved back.
+            */
+            if(currentStateVal < startSlaTimerStateVal){
+                return;
+            }
+
+            getFullRallyItem(statesObj);
+        }
+
+        //Get the full rally item.
+        function getFullRallyItem(statesObj){
+            var itemRef = rally.sdk.util.Ref.getRef(item);        
+            var rallyDataSource = new rally.sdk.data.RallyDataSource();
+            rallyDataSource.getRallyObject(itemRef, function callBack(obj){getAllRevisions(obj, statesObj);}, errorCallBack);
+        }
+
+        function getAllRevisions(itemObj, statesObj){
+            var revHistRef = rally.sdk.util.Ref.getRef(itemObj.RevisionHistory);            
+            var rallyDataSource = new rally.sdk.data.RallyDataSource();
+            
+            rallyDataSource.getRallyObject(revHistRef, function refCallBack(obj){buildDueDateCall(card, itemObj, obj, statesObj);}, errorCallBack);
+        }
+
+        //Build the SLA logic.
+        function buildDueDateCall(card, itemObj, revisions, statesObj){
+            that._getDueDate(card, itemObj, revisions, statesObj);
+        }
+
+        function errorCallBack(response){           
+            console.log("ERROR!!!!!  " + JSON.stringify(response));
+        }
+
+    };
+
+    this.getRallyStateVal = function(rallyState, storyStates){                
+        for(var i = 0;i < storyStates.length;i++){
+            if(rallyState == storyStates[i]){
+                return i;
+            }
+        }
+        return NaN;
+    };
+
+    this._getDueDate = function(card, itemObj, revisionObj, statesObj) {
+        
+        //var userStory = itemObj;
+        var revHist = revisionObj;        
+        
+        var sla = options.showSlaFor;
+        var startSlaTimerState = options.slaStart;
+
+        //Determine if this user story has entered the SLA start date if so capture the date it entered.
+        function getSlaStartStateChange() {            
+            var dueDateStartChangeDate = "";
+            var revisions = revHist.Revisions;           
+            for(var i = 0; i < revisions.length; i++) { 
+                var revision = revisions[i];              
+                if (dueDateStartChangeDate.length === 0) {
+                    if (revision.Description.indexOf("SCHEDULE STATE changed from") !== -1 && revision.Description.indexOf(" to [" + startSlaTimerState + "]") !== -1) {
+
+                        var descr = revision.Description;
+                        descr = descr.slice(descr.indexOf("SCHEDULE STATE changed from ["), -1).replace("SCHEDULE STATE changed from [", "");                        
+                        descr = descr.slice(0,descr.indexOf("]"));
+
+                        if(that.getRallyStateVal(descr, statesObj.storyStates) > that.getRallyStateVal(startSlaTimerState, statesObj.storyStates)){
+                            //Do nothing because someone has moved a card back to the starting state and it is still on the board but we want to take the earlier time.
+                        }
+                        else{
+                            dueDateStartChangeDate = revision.CreationDate;
+                        }                                       
+                    }                    
+                }               
+            }
+            return dueDateStartChangeDate;
+        }
+
+        function getDayOrDays(num){
+            if(num > 1){
+                return "days";
+            }
+            else if(num == 1){
+                return "day";
+            }
+            else if(num == 0){
+                return "days";
+            }
+        }
+
+        function getWrkDayMsg(wrkDays){
+            if(wrkDays > 1){
+                return wrkDays + " days on the board.";
+            }
+            else if(wrkDays === 1 || wrkDays === 0){
+                return "This card was pulled today.";
+            }
+        }
+
+        function addToolTip(elem, msg){
+             var tooltip = new rally.sdk.ui.basic.Tooltip({
+                message: msg,
+                position: "below"
+            });
+            tooltip.display(elem);
+        }
+
+        function significantDateFormater(date) {
+            date.setHours(00);
+            date.setMinutes(00);
+            date.setSeconds(00);
+            date.setMilliseconds(000);
+            return date;
+        }
+
+
+        var slaStartDate = getSlaStartStateChange();
+        /*
+        Sometimes the state of an item does not reflect its actual state.
+        For intance: If someone creates a user story and sets the state to "Defined".
+        Then there will be no revision history of the item moving into the Rally state we are looking for.
+        Maybe we ought to display a message?
+        */
+        if (slaStartDate === "") {
+            return;
+        }
+
+        slaStartDate = rally.sdk.util.DateTime.fromIsoString(slaStartDate);
+
+        //set the sla start date to the beginning of the day
+        slaStartDate = significantDateFormater(slaStartDate);       
+        var today = significantDateFormater(new Date());
+        
+        var cardDueDate = that.dateSlaDueDateMinusWeekends(slaStartDate, sla);
+        var dueDateDiff = rally.sdk.util.DateTime.getDifference(cardDueDate, today, "day");
+
+        var formattedDate = rally.sdk.util.DateTime.format(cardDueDate, "EEE MMM dd");
+
+        //If the diff is negative we are past the due date.
+        if (dueDateDiff < 0) {
+            var daysPast = that.calcNumOfWrkDaysBetweenTwoDates(cardDueDate, today, true);
+            var pastSLATextNode = document.createTextNode("SLA: " + daysPast + " " + getDayOrDays(daysPast) + " past (Due: " + formattedDate + ")");
+            var slaDiv = that.createSlaDiv(card);
+            slaDiv.appendChild(pastSLATextNode);
+            dojo.addClass(slaDiv, "pastsla");
+
+            var msg = "This Card is past its SLA of " + sla + " day(s)."
+            var elem = dojo.query('.slastatus', card)[0];
+            addToolTip(elem, msg);
+
+            return;
+        }
+        else if (dueDateDiff === 1) {
+            var onedaySLATextNode = document.createTextNode("SLA: " + dueDateDiff + " " + getDayOrDays(dueDateDiff) + " left (Due: " + formattedDate + ")");
+
+            var slaDiv = that.createSlaDiv(card);
+            slaDiv.appendChild(onedaySLATextNode);
+            dojo.addClass(slaDiv, "pastsla");
+
+            var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, today, false);
+            var msg = getWrkDayMsg(wrkDays);
+            var elem = dojo.query('.slastatus', card)[0];
+            addToolTip(elem, msg);
+
+            return;
+        }
+        else if (dueDateDiff === 0) {
+            var onedaySLATextNode = document.createTextNode("SLA: DUE TODAY (" + formattedDate + ")");
+
+            var slaDiv = that.createSlaDiv(card);
+            slaDiv.appendChild(onedaySLATextNode);
+            dojo.addClass(slaDiv, "pastsla");
+
+            var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, today, false);
+            var msg = getWrkDayMsg(wrkDays);
+            var elem = dojo.query('.slastatus', card)[0];
+            addToolTip(elem, msg);
+
+            return;
+        }
+        else if (dueDateDiff > 1) {
+			var daysLeft = that.calcNumOfWrkDaysBetweenTwoDates(today, cardDueDate, false);
+            var daysOnBoard = document.createTextNode("SLA: " + daysLeft + " " + getDayOrDays(daysLeft) + " left (Due: " + formattedDate + ")");
+            that.createSlaDiv(card).appendChild(daysOnBoard);
+
+            var wrkDays = that.calcNumOfWrkDaysBetweenTwoDates(slaStartDate, today, false);
+            var msg = getWrkDayMsg(wrkDays);
+            var elem = dojo.query('.slastatus', card)[0];
+            addToolTip(elem, msg);
+
+            return;
+        }
+    };
+
+    this.calcNumOfWrkDaysBetweenTwoDates = function (startDate, endDate, inclusive) {        
+        var tempDate = new Date(startDate);        
+		var i;
+		if(inclusive){
+			i = 0;
+		}
+		else{
+			i = 1;
+		}
+        while (tempDate.getTime() < endDate.getTime()) {            
+            if (!that.isAWorkDay(tempDate)) {
+                //Increment the date but, DO NOT increment the counter!
+                tempDate = new Date(tempDate.setDate(tempDate.getDate() + 1));
+            }
+            else {
+                tempDate = new Date(tempDate.setDate(tempDate.getDate() + 1));
+                i++;
+            }
+        }
+        return i;
+    };
+
+    this.dateSlaDueDateMinusWeekends = function(dateSlaStarted, sla){
+        var startDate = new Date(dateSlaStarted);
+        
+        var tempDate = new Date(startDate);
+        var i = 1;
+        while(i < sla || !that.isAWorkDay(tempDate)){        
+            if(!that.isAWorkDay(tempDate)){
+                //Increment the date but, DO NOT increment the counter!
+                tempDate = new Date(tempDate.setDate(tempDate.getDate() + 1));                
+            }
+            else{
+                tempDate = new Date(tempDate.setDate(tempDate.getDate() + 1));
+                i++;
+            }
+        }
+
+        return tempDate;
+    };
+
+    this.isAWorkDay = function(aDate){
+        var SATURDAY = 6;
+        var SUNDAY = 0;
+
+        if(aDate.getDay() === SATURDAY || aDate.getDay() === SUNDAY){
+            return false;
+        }
+        else{
+            return true;
+        }         
+    };
+
+    this.createSlaDiv = function(card){
+        var contentDiv = dojo.query('.cardContent', card)[0];            
+        var slaStatusDiv = document.createElement("div");
+        dojo.addClass(slaStatusDiv, "slastatus");
+        contentDiv.appendChild(slaStatusDiv);
+        return slaStatusDiv;
     };
 
     this.updateCard = function(node) {
         card = node.firstChild;
-        that._populateCard();
+        that._populateCard();        
     };
 
     this._populateCard = function() {
@@ -184,7 +475,7 @@ KanbanCardRenderer = function(column, item, options) {
         var tasksDiv = dojo.query('.tasks', card);
 
         if (tasksDiv.length > 0) {
-            tasksDiv = tasksDiv[0];
+            tasksDiv = tasksDiv[0];            
             dojo.empty(tasksDiv);
             var completedTasks = 0;
             rally.forEach(item.Tasks, function(task) {
@@ -262,6 +553,11 @@ KanbanCardRenderer = function(column, item, options) {
                 ageDiv.appendChild(ageTextNode);
             }
         }
+
+         //Run Due Date Logic        
+        if (options && options.showSla && !options.attribute) {            
+            that._getFullRallyItem(card);            
+        }        
     };
 
     this.renderCard = function() {
@@ -302,7 +598,7 @@ KanbanCardRenderer = function(column, item, options) {
             dojo.addClass(tasksDiv, "tasks");
             statusDiv.appendChild(tasksDiv);
         }
-
+        
         if (options && options.showDefectStatus && item.Defects && item.Defects.length) {
             var defectsDiv = document.createElement("div");
             dojo.addClass(defectsDiv, "defects");
@@ -313,11 +609,11 @@ KanbanCardRenderer = function(column, item, options) {
             cardContent.appendChild(statusDiv);
         }
 
-        if (options && options.showAgeAfter) {
+        if (options && options.showAgeAfter) {           
             var ageDiv = document.createElement('div');
             dojo.addClass(ageDiv, "age");
             cardContent.appendChild(ageDiv);
-        }
+        }        
 
         that._populateCard(card);
 

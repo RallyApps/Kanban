@@ -14,7 +14,7 @@ KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
     var stateDropdown, dialog;
     var allAttributes = {}, scheduleStateValues = {};
     var controls = [], rows = [], accessors = [];
-    var hideCardsCheckBox, showTasksCheckBox, showDefectsCheckBox, showAgeCheckBox, showAgeTextBox, colorByArtifactTypeCheckBox;
+    var hideCardsCheckBox, showTasksCheckBox, showDefectsCheckBox, showAgeCheckBox, showAgeTextBox, colorByArtifactTypeCheckBox, showSlaCheckBox, showSlaTextBox, showSlaStartDropdown, showSlaEndDropdown;
 
     var notMappedKey = "NotMapped";
     var notMappedVal = "-- Not Mapped --";
@@ -110,6 +110,23 @@ KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
         }
     };
 
+    that._alterSlaTextBox = function(textbox, args) {
+        if (!args.value || isNaN(args.value) || args.value < 1) {
+            textbox.setValue(5);
+        } else {
+            textbox.setValue(args.value);
+        }
+    };
+
+    that._alterStartSlaDropdown = function(box, args) { 
+       //For now, Do nothing       
+    };
+
+    that._alterStopSlaDropdown = function(box, args) {
+        //For now, Do nothing  
+    };
+
+
     that._addControlToRow = function(row, divId, control, containerCss) {
         var td = document.createElement("td");
         var div = document.createElement("div");
@@ -166,6 +183,7 @@ KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
 
         that._addControlToRow(row, stringValue + "-dropdown-" + rows.length, mappingDropdown);
 
+
         var accessor = {
             field:stringValue,
             get: function() {
@@ -178,6 +196,7 @@ KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
                 if (scheduleStateValue !== notMappedKey) {
                     result.state = scheduleStateValue;
                 }
+
                 return result;
             },
             set:function(object) {
@@ -287,6 +306,63 @@ KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
             checked: false,
             rememberChecked: true
         });
+
+        showSlaCheckBox = new rally.sdk.ui.basic.CheckBox({
+            label:"Use",
+            showLabel:true,
+            labelPosition:"after",
+            checked: false,
+            rememberChecked: true
+        });
+        showSlaCheckBox.display("showSlaCheckBox");
+
+        showSlaTextBox = new rally.sdk.ui.basic.TextBox({
+            label: " day(s) for SLA",
+            showLabel:true,
+            labelPosition:"after",
+            width: 30,
+            value: 5,
+            rememberValue: true
+        });
+        showSlaTextBox.addEventListener("onChange", that._alterSlaTextBox);
+        showSlaTextBox.display("showSlaTextBox");
+
+        var keys = [];
+        for (key in scheduleStateValues) {
+            if (key != notMappedKey) {
+                keys.push(key);
+            }
+        }
+
+        var dropDownItems = [];
+        for (var i = 0; i < keys.length; i++) {
+            dropDownItems.push({label: scheduleStateValues[keys[i]], value: i})
+        }
+
+        showSlaStartDropdown = new rally.sdk.ui.basic.Dropdown({
+            label: "SLA start state ",
+            showLabel: true,
+            labelPosition: "before",
+            items: dropDownItems,
+            rememberSelection: true,
+            defaultDisplayValue: dropDownItems[0],
+            defaultValue: 0
+        });
+        showSlaStartDropdown.addEventListener("onChange", that._alterStartSlaDropdown);
+        showSlaStartDropdown.display("showSlaStartDropdown");
+
+        showSlaEndDropdown = new rally.sdk.ui.basic.Dropdown({
+            label: "SLA end state ",
+            showLabel: true,
+            labelPosition: "before",
+            items: dropDownItems,
+            rememberSelection: true,
+            defaultDisplayValue: dropDownItems[1],
+            defaultValue: 1
+        });
+        showSlaEndDropdown.addEventListener("onChange", that._alterStopSlaDropdown);
+        showSlaEndDropdown.display("showSlaEndDropdown");
+
         colorByArtifactTypeCheckBox.display("colorByArtifactTypeCheckBox");
     };
 
@@ -404,7 +480,11 @@ KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
             showDefectStatus: showDefectsCheckBox.getChecked(),
             showAge: showAgeCheckBox.getChecked(),
             showAgeAfter: showAgeTextBox.getValue(),
-            colorByArtifactType: colorByArtifactTypeCheckBox.getChecked()
+            colorByArtifactType: colorByArtifactTypeCheckBox.getChecked(),
+            showSla: showSlaCheckBox.getChecked(),
+            showSlaFor: showSlaTextBox.getValue(),
+            slaStart: showSlaStartDropdown.getDisplayedValue(),
+            slaEnd: showSlaEndDropdown.getDisplayedValue()
         };
         rally.forEach(accessors, function(value) {
             values.fieldInfos[value.field] = value.get();
@@ -426,6 +506,10 @@ KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
         showAgeCheckBox.setChecked(currentPrefs.showAge);
         showAgeTextBox.setValue(currentPrefs.showAgeAfter);
         colorByArtifactTypeCheckBox.setChecked(currentPrefs.colorByArtifactType);
+        showSlaCheckBox.setChecked(currentPrefs.showSla);
+        showSlaTextBox.setValue(currentPrefs.showSlaFor);
+        showSlaStartDropdown.setDisplayedValue(currentPrefs.slaStart),
+        showSlaEndDropdown.setDisplayedValue(currentPrefs.slaEnd)
 
         function setValues() {
             var fieldInfos = currentPrefs.fieldInfos;
@@ -433,6 +517,7 @@ KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
             if (deleter) {
                 deleter.remove();
             }
+
             rally.forEach(accessors, function(accessor) {
                 if (fieldInfos[accessor.field]) {
                     accessor.set(fieldInfos[accessor.field]);
