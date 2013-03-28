@@ -15,6 +15,16 @@ In other words, a Kanban board only shows the next few stories that need to be c
 
 ### Running the App
 
+NOTE: Rally has changed how their web services act when handling kanban state. For now, you need to manually add in a parameter so the ready indicator will still show up on the card. On the sdk.js source include line, you need to add a parameter called apiVersion to have the indicator show up. On App-debug.html, it's this line:
+
+	<script type ="text/javascript" src="https://rally1.rallydev.com/apps/1.32/sdk.js?debug=true&apiVersion=1.38"></script>
+
+And on the deploy App.html, it's this line:
+
+	  <script type ="text/javascript" src="/apps/1.32/sdk.js?apiVersion=1.38"></script>
+
+This has to be done manually every time you run the rake task. With App-debug.html, however, you shouldn't have to run rake very often (only when adding files or changing servers).
+
 If you want to start using the app immediately, create an Custom HTML app on your Rally dashboard. Then copy App.html from the deploy folder into the HTML text area. That's it, it should be ready to use. See [this](http://www.rallydev.com/help/use_apps#create) help link if you don't know how to create a dashboard page for Custom HTML apps.
 
 Or you can just click [here](https://raw.github.com/RallyApps/Kanban/master/deploy/App.html) to find the file and copy it into the custom HTML app.
