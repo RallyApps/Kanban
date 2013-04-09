@@ -602,7 +602,7 @@ module Rally
       private
 
       def assure_deploy_directory_exists
-        mkdir DEPLOY_DIR unless File.exists?(DEPLOY_DIR)
+        Dir.mkdir DEPLOY_DIR unless  File.exists?(DEPLOY_DIR)
       end
 
       # These template files cannot exist when creating a new project. *.template.html is an exception and not in this list
@@ -627,8 +627,9 @@ module Rally
           file.each_line do |line|
             # This will replace the placeholder App SDK include in the template file
             if line.include? "src=\"/apps/"
-              sdk_src_path = debug ? @config.sdk_debug_path : @config.sdk_path
-              line = "  " + "<script type =\"text/javascript\" src=\"#{sdk_src_path}\"></script>" + "\n"
+              # Get only the /apps/sdk.js string with quotes stripped out
+              relative_path = line[/src=(.*)"/, 1].tr('"', '')
+              line = build_src_path(relative_path, debug)
             end
 
             tpl_file = tpl_file + line
@@ -710,6 +711,22 @@ module Rally
 
       def is_javascript_file(file)
         file.split('.').last.eql? "js"
+      end
+
+      def build_src_path(relative_path, debug)
+        url_query = URI.parse(relative_path).query
+
+        sdk_src_path = "/apps/#{@config.sdk_version}/#{@config.sdk_file}"
+        sdk_src_path[0, 0] = @config.server if debug
+
+        if url_query.nil?
+          sdk_src_path += "?debug=true" if debug
+        else
+          sdk_src_path += "?#{url_query}"
+          sdk_src_path += "&debug=true" if debug
+        end
+
+        "  " + "<script type =\"text/javascript\" src=\"#{sdk_src_path}\"></script>" + "\n"
       end
     end
 
