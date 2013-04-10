@@ -1,8 +1,5 @@
-/**
- Copyright (c) 2011  Rally Software Development Corp.  All rights reserved
- */
-
-KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
+/** Copyright (c) 2013 Rally Software Development Corp. All rights reserved **/
+KanbanConfigPanel = function(rallyDataSource, onConfigHide, hasReleaseType) {
     rally.sdk.ComponentBase.call(this);
 
     this.getValidEvents = function() {
@@ -14,7 +11,9 @@ KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
     var stateDropdown, dialog;
     var allAttributes = {}, scheduleStateValues = {};
     var controls = [], rows = [], accessors = [];
+    var releaseTypeAvailable = hasReleaseType;
     var hideCardsCheckBox, showTasksCheckBox, showDefectsCheckBox, showAgeCheckBox, showAgeTextBox, colorByArtifactTypeCheckBox;
+    var dialogId = new Date().toString();
 
     var notMappedKey = "NotMapped";
     var notMappedVal = "-- Not Mapped --";
@@ -26,13 +25,21 @@ KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
 
     that.show = function() {
         if (dialog) {
+            that._disableCancelButton();
             dialog.show();
+            that._alignSettingsDialog();
         }
     };
 
     that.hide = function() {
         if (dialog) {
             dialog.hide();
+        }
+    };
+
+    that.destroy = function() {
+        if (dialog) {
+            dialog.destroyRecursive();
         }
     };
 
@@ -54,7 +61,7 @@ KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
                 title = "Configure Default Settings";
             }
             dialog = new rally.sdk.ui.basic.Dialog({
-                id : new Date().toString(),
+                id : dialogId,
                 title: title,
                 width: 400,
                 height: 350,
@@ -67,8 +74,10 @@ KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
                 that.fireEvent(that.getValidEvents().onHide, {});
             });
             dialog.display();
+            that._alignSettingsDialog();
             that.displaySaveCancelFeatures();
             that._displayHelpDialog();
+            that._disableCancelButton();
         }
 
         that._retrievePreferences(createDialog);
@@ -80,16 +89,27 @@ KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
 
         var saveButton = new rally.sdk.ui.basic.Button({text:"Save", value:"Save"});
         saveButton.display(buttonContainer, function() {
+            dialog.hide();
             that._storeValues(that._saveComplete);
         });
 
-        var cancelLink = "<a href='' id='cancelLink'>Cancel</a>";
-        dojo.place(cancelLink, buttonContainer);
-        dojo.connect(dojo.byId('cancelLink'), "onclick", function(event) {
+        var cancelLink = "<a href=''>Cancel</a>";
+        that.cancelButton = dojo.place(cancelLink, buttonContainer);
+        dojo.connect(that.cancelButton, "onclick", function(event) {
             dialog.hide();
             that._setValues();
             dojo.stopEvent(event);
         });
+    };
+
+    that._alignSettingsDialog = function() {
+        var dialogContainer = dojo.query(".dijitDialog");
+        if (dialogContainer.length > 0) {
+            dojo.style(dialogContainer[0], 'top', '10px');
+        }
+        //Hack to force dojo widget to maintain position relative to container
+        var dialog = dijit.byId(dialogId);
+        dialog._relativePosition = dojo.position(dialog.domNode);
     };
 
     that._alterWipTextBox = function(textbox, args) {
@@ -233,14 +253,16 @@ KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
     };
 
     that._displayTogglePreferences = function() {
-        hideCardsCheckBox = new rally.sdk.ui.basic.CheckBox({
-            label:"Hide cards in last visible column if assigned to a release",
-            showLabel:true,
-            labelPosition:"after",
-            checked: true,
-            rememberChecked: true
-        });
-        hideCardsCheckBox.display("hideCardsCheckBox");
+        if (releaseTypeAvailable) {
+            hideCardsCheckBox = new rally.sdk.ui.basic.CheckBox({
+                label:"Hide cards in last visible column if assigned to a release",
+                showLabel:true,
+                labelPosition:"after",
+                checked: true,
+                rememberChecked: true
+            });
+            hideCardsCheckBox.display("hideCardsCheckBox");
+        }
 
         showTasksCheckBox = new rally.sdk.ui.basic.CheckBox({
             label:"Show task status for cards with tasks",
@@ -399,13 +421,15 @@ KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
             kanbanField:stateDropdown.getValue(),
             reportKanbanField:stateDropdown.getDisplayedValue(),
             fieldInfos:{},
-            hideLastColumnIfReleased:hideCardsCheckBox.getChecked(),
             showTaskCompletion: showTasksCheckBox.getChecked(),
             showDefectStatus: showDefectsCheckBox.getChecked(),
             showAge: showAgeCheckBox.getChecked(),
             showAgeAfter: showAgeTextBox.getValue(),
             colorByArtifactType: colorByArtifactTypeCheckBox.getChecked()
         };
+        if (hideCardsCheckBox) {
+            values.hideLastColumnIfReleased = hideCardsCheckBox.getChecked();
+        }
         rally.forEach(accessors, function(value) {
             values.fieldInfos[value.field] = value.get();
 
@@ -420,7 +444,9 @@ KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
 
     //this wraps the controls and sets their values.
     that._setValues = function() {
-        hideCardsCheckBox.setChecked(currentPrefs.hideLastColumnIfReleased);
+        if (hideCardsCheckBox) {
+            hideCardsCheckBox.setChecked(currentPrefs.hideLastColumnIfReleased);
+        }
         showTasksCheckBox.setChecked(currentPrefs.showTaskCompletion);
         showDefectsCheckBox.setChecked(currentPrefs.showDefectStatus);
         showAgeCheckBox.setChecked(currentPrefs.showAge);
@@ -487,9 +513,7 @@ KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
     };
 
     that._saveComplete = function() {
-        dialog.hide();
-        that._retrievePreferences(function() {
-        });
+        that._retrievePreferences(function() {});
         onConfigHide();
     };
 
@@ -551,6 +575,18 @@ KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
 
         }
 
+    };
+
+    that._disableCancelButton = function() {
+        if (!that.cancelButton) {
+            return;
+        }
+
+        if (that.disableCancel) {
+            dojo.style(that.cancelButton, 'display', 'none');
+        } else {
+            dojo.style(that.cancelButton, 'display', 'inline');
+        }
     };
 
 };

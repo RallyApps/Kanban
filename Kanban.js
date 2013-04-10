@@ -1,4 +1,5 @@
-KanbanBoard = function(rallyDataSource, configShow) {
+/** Copyright (c) 2013 Rally Software Development Corp. All rights reserved **/
+KanbanBoard = function(rallyDataSource, isManualRankWorkspace) {
     var FILTER_FIELD = 'Tags.Name';
 
     var cardboard;
@@ -9,7 +10,32 @@ KanbanBoard = function(rallyDataSource, configShow) {
             columns, scheduleStatesMap,
             hideLastColumnIfReleased, showTaskCompletion, showDefectStatus,
             lastState, artifactTypes,
-            colorByArtifactType, policyCheckBox;
+            colorByArtifactType, policyCheckBox, releaseTypeAvailable;
+
+    that.shouldShowConfig = function() {
+        var query = window.location.href.split('?'), params, configShow;
+        if (query.length > 1) {
+            params = dojo.queryToObject(query[1]);
+        }
+
+        return (params && params.isEditable === 'true') ? true : false;
+    };
+
+    that.showConfig = function(disableCancel) {
+        if (!that.shouldShowConfig()) {
+            return;
+        }
+
+        if (!that.configPanel) {
+            that.configPanel = new KanbanConfigPanel(rallyDataSource, that._redisplayBoard, releaseTypeAvailable);
+            that.configPanel.disableCancel = disableCancel;
+            that.configPanel.display();
+        }
+        else {
+            that.configPanel.disableCancel = disableCancel;
+            that.configPanel.show();
+        }
+    };
 
     that._showThroughputReport = function() {
         var config = {reportNumber: 180, reportName: "Throughput Report",
@@ -95,27 +121,6 @@ KanbanBoard = function(rallyDataSource, configShow) {
     that._createLayout = function(element) {
         rally.sdk.ui.AppHeader.setHelpTopic('238');
         rally.sdk.ui.AppHeader.showPageTools(true);
-
-        rally.sdk.ui.AppHeader.addPageTool({
-            key: "showCycleTimeReport",
-            label: "Show Cycle Time Report",
-            onClick: that._showCycleTimeReport
-        });
-
-        rally.sdk.ui.AppHeader.addPageTool({
-            key: "showThroughputReport",
-            label: "Show Throughput Report",
-            onClick: that._showThroughputReport
-        });
-
-        if (rally.sdk.util.Context.isInsideRally() && window.top !== window.self) {
-            rally.sdk.ui.AppHeader.addPageTool({
-                key: "newStory",
-                label: "Add New Story",
-                onClick: that._showNewStoryEditor
-            });
-            rally.sdk.ui.AppHeader.addPageTool(rally.sdk.ui.PageTools.BuiltIn.OpenInNewWindow);
-        }
 
         var headerDiv = document.createElement("div");
         element.appendChild(headerDiv);
@@ -263,11 +268,27 @@ KanbanBoard = function(rallyDataSource, configShow) {
             }
             else {
                 //no prefs found fire up dialog
-                configShow();
+                that.showConfig(true);
             }
         }
+        function determineIfReleaseTypeAvailable(results) {
+            var rallyDataSource = new rally.sdk.data.RallyDataSource('__WORKSPACE_OID__',
+                    '__PROJECT_OID__',
+                    '__PROJECT_SCOPING_UP__',
+                    '__PROJECT_SCOPING_DOWN__');
 
-        rallyDataSource.preferences.getAppPreferences(populateConfigForm);
+            rallyDataSource.find({
+                key: 'enabledTypeDefs',
+                type: 'TypeDefinition',
+                fetch  : 'Name,ElementName',
+                query  : '(Name = "Release")'
+            }, function(typeDefs) {
+                releaseTypeAvailable = typeDefs.enabledTypeDefs.length > 0;
+                populateConfigForm(results);
+            });
+        }
+
+        rallyDataSource.preferences.getAppPreferences(determineIfReleaseTypeAvailable);
     };
 
     that._onBeforeItemUpdated = function(c, args) {
@@ -297,6 +318,7 @@ KanbanBoard = function(rallyDataSource, configShow) {
                 attribute       : kanbanField,
                 sortAscending   : true,
                 order           : "Rank",
+                isManualRankWorkspace  : isManualRankWorkspace,
                 cardRenderer    : KanbanCardRenderer,
                 cardOptions     : {
                     showTaskCompletion: showTaskCompletion,
@@ -318,8 +340,8 @@ KanbanBoard = function(rallyDataSource, configShow) {
                 cardboardConfig.fetch += ",Defects";
             }
 
-            if (hideLastColumnIfReleased) {
-                cardboardConfig.query = new rally.sdk.util.Query("Release = null").or(kanbanField + " != " + '"' + lastState + '"');
+            if (hideLastColumnIfReleased && releaseTypeAvailable) {
+                cardboardConfig.query = new rally.sdk.util.Query("Release = null").or(kanbanField + ' != "' + lastState + '"');
             }
 
             if (filterByTagsDropdown && filterByTagsDropdown.getDisplayedValue()) {
@@ -346,12 +368,50 @@ KanbanBoard = function(rallyDataSource, configShow) {
         that._getAndStorePrefData(displayBoard);
     };
 
+    that._addAppHeaderMenuItems = function() {
+        if (that.shouldShowConfig()) {
+            rally.sdk.ui.AppHeader.addPageTool({
+                key:"showConfig",
+                label: "Settings",
+                onClick: function() {that.showConfig();}
+            });
+        }
+
+        rally.sdk.ui.AppHeader.addPageTool({
+            key: "showCycleTimeReport",
+            label: "Show Cycle Time Report",
+            onClick: that._showCycleTimeReport
+        });
+
+        rally.sdk.ui.AppHeader.addPageTool({
+            key: "showThroughputReport",
+            label: "Show Throughput Report",
+            onClick: that._showThroughputReport
+        });
+
+        if (that._inIframeInsideRally()) {
+            rally.sdk.util.Login.isNotViewerOfProject(rallyDataSource.getProject(), function() {
+                rally.sdk.ui.AppHeader.addPageTool({
+                    key: "newStory",
+                    label: "Add New Story",
+                    onClick: that._showNewStoryEditor
+                });
+                rally.sdk.ui.AppHeader.addPageTool(rally.sdk.ui.PageTools.BuiltIn.OpenInNewWindow);
+            }, function(){}, function(){});
+        }
+    };
+
     that.display = function(element) {
+        this._addAppHeaderMenuItems();
 
         //Build app layout
         this._createLayout(element);
 
         //Redisplay the board
         this._redisplayBoard();
+    };
+
+    that._inIframeInsideRally = function() {
+        return rally.sdk.util.Context.isInsideRally() && window.top !== window.self;
     };
 };

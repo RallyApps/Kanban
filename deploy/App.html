@@ -4,11 +4,12 @@
 <head>
     <title>Kanban Board</title>
     <meta name="Name" content="App: Kanban Board"/>
-    <meta name="Version" content="2012.01.14"/>
+    <meta name="Version" content="2013.04.09"/>
     <meta name="Vendor" content="Rally Software"/>
-  <script type ="text/javascript" src="/apps/1.32/sdk.js?apiVersion=1.38"></script>
+  <script type ="text/javascript" src="/apps/1.32/sdk.js?apiVersion=1.41"></script>
   <script type ="text/javascript">
-    KanbanBoard = function(rallyDataSource, configShow) {
+    /** Copyright (c) 2013 Rally Software Development Corp. All rights reserved **/
+    KanbanBoard = function(rallyDataSource, isManualRankWorkspace) {
         var FILTER_FIELD = 'Tags.Name';
     
         var cardboard;
@@ -19,7 +20,32 @@
                 columns, scheduleStatesMap,
                 hideLastColumnIfReleased, showTaskCompletion, showDefectStatus,
                 lastState, artifactTypes,
-                colorByArtifactType, policyCheckBox;
+                colorByArtifactType, policyCheckBox, releaseTypeAvailable;
+    
+        that.shouldShowConfig = function() {
+            var query = window.location.href.split('?'), params, configShow;
+            if (query.length > 1) {
+                params = dojo.queryToObject(query[1]);
+            }
+    
+            return (params && params.isEditable === 'true') ? true : false;
+        };
+    
+        that.showConfig = function(disableCancel) {
+            if (!that.shouldShowConfig()) {
+                return;
+            }
+    
+            if (!that.configPanel) {
+                that.configPanel = new KanbanConfigPanel(rallyDataSource, that._redisplayBoard, releaseTypeAvailable);
+                that.configPanel.disableCancel = disableCancel;
+                that.configPanel.display();
+            }
+            else {
+                that.configPanel.disableCancel = disableCancel;
+                that.configPanel.show();
+            }
+        };
     
         that._showThroughputReport = function() {
             var config = {reportNumber: 180, reportName: "Throughput Report",
@@ -105,27 +131,6 @@
         that._createLayout = function(element) {
             rally.sdk.ui.AppHeader.setHelpTopic('238');
             rally.sdk.ui.AppHeader.showPageTools(true);
-    
-            rally.sdk.ui.AppHeader.addPageTool({
-                key: "showCycleTimeReport",
-                label: "Show Cycle Time Report",
-                onClick: that._showCycleTimeReport
-            });
-    
-            rally.sdk.ui.AppHeader.addPageTool({
-                key: "showThroughputReport",
-                label: "Show Throughput Report",
-                onClick: that._showThroughputReport
-            });
-    
-            if (rally.sdk.util.Context.isInsideRally() && window.top !== window.self) {
-                rally.sdk.ui.AppHeader.addPageTool({
-                    key: "newStory",
-                    label: "Add New Story",
-                    onClick: that._showNewStoryEditor
-                });
-                rally.sdk.ui.AppHeader.addPageTool(rally.sdk.ui.PageTools.BuiltIn.OpenInNewWindow);
-            }
     
             var headerDiv = document.createElement("div");
             element.appendChild(headerDiv);
@@ -273,11 +278,27 @@
                 }
                 else {
                     //no prefs found fire up dialog
-                    configShow();
+                    that.showConfig(true);
                 }
             }
+            function determineIfReleaseTypeAvailable(results) {
+                var rallyDataSource = new rally.sdk.data.RallyDataSource('__WORKSPACE_OID__',
+                        '__PROJECT_OID__',
+                        '__PROJECT_SCOPING_UP__',
+                        '__PROJECT_SCOPING_DOWN__');
     
-            rallyDataSource.preferences.getAppPreferences(populateConfigForm);
+                rallyDataSource.find({
+                    key: 'enabledTypeDefs',
+                    type: 'TypeDefinition',
+                    fetch  : 'Name,ElementName',
+                    query  : '(Name = "Release")'
+                }, function(typeDefs) {
+                    releaseTypeAvailable = typeDefs.enabledTypeDefs.length > 0;
+                    populateConfigForm(results);
+                });
+            }
+    
+            rallyDataSource.preferences.getAppPreferences(determineIfReleaseTypeAvailable);
         };
     
         that._onBeforeItemUpdated = function(c, args) {
@@ -307,6 +328,7 @@
                     attribute       : kanbanField,
                     sortAscending   : true,
                     order           : "Rank",
+                    isManualRankWorkspace  : isManualRankWorkspace,
                     cardRenderer    : KanbanCardRenderer,
                     cardOptions     : {
                         showTaskCompletion: showTaskCompletion,
@@ -328,8 +350,8 @@
                     cardboardConfig.fetch += ",Defects";
                 }
     
-                if (hideLastColumnIfReleased) {
-                    cardboardConfig.query = new rally.sdk.util.Query("Release = null").or(kanbanField + " != " + '"' + lastState + '"');
+                if (hideLastColumnIfReleased && releaseTypeAvailable) {
+                    cardboardConfig.query = new rally.sdk.util.Query("Release = null").or(kanbanField + ' != "' + lastState + '"');
                 }
     
                 if (filterByTagsDropdown && filterByTagsDropdown.getDisplayedValue()) {
@@ -356,7 +378,41 @@
             that._getAndStorePrefData(displayBoard);
         };
     
+        that._addAppHeaderMenuItems = function() {
+            if (that.shouldShowConfig()) {
+                rally.sdk.ui.AppHeader.addPageTool({
+                    key:"showConfig",
+                    label: "Settings",
+                    onClick: function() {that.showConfig();}
+                });
+            }
+    
+            rally.sdk.ui.AppHeader.addPageTool({
+                key: "showCycleTimeReport",
+                label: "Show Cycle Time Report",
+                onClick: that._showCycleTimeReport
+            });
+    
+            rally.sdk.ui.AppHeader.addPageTool({
+                key: "showThroughputReport",
+                label: "Show Throughput Report",
+                onClick: that._showThroughputReport
+            });
+    
+            if (that._inIframeInsideRally()) {
+                rally.sdk.util.Login.isNotViewerOfProject(rallyDataSource.getProject(), function() {
+                    rally.sdk.ui.AppHeader.addPageTool({
+                        key: "newStory",
+                        label: "Add New Story",
+                        onClick: that._showNewStoryEditor
+                    });
+                    rally.sdk.ui.AppHeader.addPageTool(rally.sdk.ui.PageTools.BuiltIn.OpenInNewWindow);
+                }, function(){}, function(){});
+            }
+        };
+    
         that.display = function(element) {
+            this._addAppHeaderMenuItems();
     
             //Build app layout
             this._createLayout(element);
@@ -364,7 +420,13 @@
             //Redisplay the board
             this._redisplayBoard();
         };
-    };    KanbanCardRenderer = function(column, item, options) {
+    
+        that._inIframeInsideRally = function() {
+            return rally.sdk.util.Context.isInsideRally() && window.top !== window.self;
+        };
+    };
+    /** Copyright (c) 2013 Rally Software Development Corp. All rights reserved **/
+    KanbanCardRenderer = function(column, item, options) {
         rally.sdk.ui.cardboard.BasicCardRenderer.call(this, column, item, options);
         var that = this;
         var cardContent,card,cardMenu;
@@ -754,6 +816,7 @@
             cardMenu.appendChild(editLinkContainer);
         };
     };
+    /** Copyright (c) 2013 Rally Software Development Corp. All rights reserved **/
     var KanbanColumnRenderer = function(board, value, options) {
         rally.sdk.ui.cardboard.BasicColumnRenderer.call(this, board, value, options);
         var that = this;
@@ -988,11 +1051,9 @@
             cards = 0;
             setCapacityText();
         };
-    };    /**
-     Copyright (c) 2011  Rally Software Development Corp.  All rights reserved
-     */
-    
-    KanbanConfigPanel = function(rallyDataSource, onConfigHide) {
+    };
+    /** Copyright (c) 2013 Rally Software Development Corp. All rights reserved **/
+    KanbanConfigPanel = function(rallyDataSource, onConfigHide, hasReleaseType) {
         rally.sdk.ComponentBase.call(this);
     
         this.getValidEvents = function() {
@@ -1004,7 +1065,9 @@
         var stateDropdown, dialog;
         var allAttributes = {}, scheduleStateValues = {};
         var controls = [], rows = [], accessors = [];
+        var releaseTypeAvailable = hasReleaseType;
         var hideCardsCheckBox, showTasksCheckBox, showDefectsCheckBox, showAgeCheckBox, showAgeTextBox, colorByArtifactTypeCheckBox;
+        var dialogId = new Date().toString();
     
         var notMappedKey = "NotMapped";
         var notMappedVal = "-- Not Mapped --";
@@ -1016,13 +1079,21 @@
     
         that.show = function() {
             if (dialog) {
+                that._disableCancelButton();
                 dialog.show();
+                that._alignSettingsDialog();
             }
         };
     
         that.hide = function() {
             if (dialog) {
                 dialog.hide();
+            }
+        };
+    
+        that.destroy = function() {
+            if (dialog) {
+                dialog.destroyRecursive();
             }
         };
     
@@ -1044,7 +1115,7 @@
                     title = "Configure Default Settings";
                 }
                 dialog = new rally.sdk.ui.basic.Dialog({
-                    id : new Date().toString(),
+                    id : dialogId,
                     title: title,
                     width: 400,
                     height: 350,
@@ -1057,8 +1128,10 @@
                     that.fireEvent(that.getValidEvents().onHide, {});
                 });
                 dialog.display();
+                that._alignSettingsDialog();
                 that.displaySaveCancelFeatures();
                 that._displayHelpDialog();
+                that._disableCancelButton();
             }
     
             that._retrievePreferences(createDialog);
@@ -1070,16 +1143,27 @@
     
             var saveButton = new rally.sdk.ui.basic.Button({text:"Save", value:"Save"});
             saveButton.display(buttonContainer, function() {
+                dialog.hide();
                 that._storeValues(that._saveComplete);
             });
     
-            var cancelLink = "<a href='' id='cancelLink'>Cancel</a>";
-            dojo.place(cancelLink, buttonContainer);
-            dojo.connect(dojo.byId('cancelLink'), "onclick", function(event) {
+            var cancelLink = "<a href=''>Cancel</a>";
+            that.cancelButton = dojo.place(cancelLink, buttonContainer);
+            dojo.connect(that.cancelButton, "onclick", function(event) {
                 dialog.hide();
                 that._setValues();
                 dojo.stopEvent(event);
             });
+        };
+    
+        that._alignSettingsDialog = function() {
+            var dialogContainer = dojo.query(".dijitDialog");
+            if (dialogContainer.length > 0) {
+                dojo.style(dialogContainer[0], 'top', '10px');
+            }
+            //Hack to force dojo widget to maintain position relative to container
+            var dialog = dijit.byId(dialogId);
+            dialog._relativePosition = dojo.position(dialog.domNode);
         };
     
         that._alterWipTextBox = function(textbox, args) {
@@ -1223,14 +1307,16 @@
         };
     
         that._displayTogglePreferences = function() {
-            hideCardsCheckBox = new rally.sdk.ui.basic.CheckBox({
-                label:"Hide cards in last visible column if assigned to a release",
-                showLabel:true,
-                labelPosition:"after",
-                checked: true,
-                rememberChecked: true
-            });
-            hideCardsCheckBox.display("hideCardsCheckBox");
+            if (releaseTypeAvailable) {
+                hideCardsCheckBox = new rally.sdk.ui.basic.CheckBox({
+                    label:"Hide cards in last visible column if assigned to a release",
+                    showLabel:true,
+                    labelPosition:"after",
+                    checked: true,
+                    rememberChecked: true
+                });
+                hideCardsCheckBox.display("hideCardsCheckBox");
+            }
     
             showTasksCheckBox = new rally.sdk.ui.basic.CheckBox({
                 label:"Show task status for cards with tasks",
@@ -1389,13 +1475,15 @@
                 kanbanField:stateDropdown.getValue(),
                 reportKanbanField:stateDropdown.getDisplayedValue(),
                 fieldInfos:{},
-                hideLastColumnIfReleased:hideCardsCheckBox.getChecked(),
                 showTaskCompletion: showTasksCheckBox.getChecked(),
                 showDefectStatus: showDefectsCheckBox.getChecked(),
                 showAge: showAgeCheckBox.getChecked(),
                 showAgeAfter: showAgeTextBox.getValue(),
                 colorByArtifactType: colorByArtifactTypeCheckBox.getChecked()
             };
+            if (hideCardsCheckBox) {
+                values.hideLastColumnIfReleased = hideCardsCheckBox.getChecked();
+            }
             rally.forEach(accessors, function(value) {
                 values.fieldInfos[value.field] = value.get();
     
@@ -1410,7 +1498,9 @@
     
         //this wraps the controls and sets their values.
         that._setValues = function() {
-            hideCardsCheckBox.setChecked(currentPrefs.hideLastColumnIfReleased);
+            if (hideCardsCheckBox) {
+                hideCardsCheckBox.setChecked(currentPrefs.hideLastColumnIfReleased);
+            }
             showTasksCheckBox.setChecked(currentPrefs.showTaskCompletion);
             showDefectsCheckBox.setChecked(currentPrefs.showDefectStatus);
             showAgeCheckBox.setChecked(currentPrefs.showAge);
@@ -1477,9 +1567,7 @@
         };
     
         that._saveComplete = function() {
-            dialog.hide();
-            that._retrievePreferences(function() {
-            });
+            that._retrievePreferences(function() {});
             onConfigHide();
         };
     
@@ -1543,13 +1631,21 @@
     
         };
     
-    };    /**
-     Copyright (c) 2011  Rally Software Development Corp.  All rights reserved
-     */
+        that._disableCancelButton = function() {
+            if (!that.cancelButton) {
+                return;
+            }
     
+            if (that.disableCancel) {
+                dojo.style(that.cancelButton, 'display', 'none');
+            } else {
+                dojo.style(that.cancelButton, 'display', 'inline');
+            }
+        };
+    
+    };
+    /** Copyright (c) 2013 Rally Software Development Corp. All rights reserved **/
     KanbanPolicy = function(rallyDataSource, callback) {
-    
-    
         var that = this;
         var workspacePrefRef, projectPrefRef, fieldName, policyDesc;
     
@@ -1625,7 +1721,9 @@
     
         };
     
-    };    KanbanReport = function(config, rallyDataSource) {
+    };
+    /** Copyright (c) 2013 Rally Software Development Corp. All rights reserved **/
+    KanbanReport = function(config, rallyDataSource) {
         var that = this;
     
         var dialog, report, divId, msgDiv;
@@ -1723,6 +1821,7 @@
             that._createReportDialog();
         };
     };
+
   </script>
 
   <style type="text/css">
@@ -2024,6 +2123,7 @@
         margin-top: 5px;
         padding-top: 5px;
     }
+
   </style>
     <script type="text/javascript">
         //this function will help us by getting our default project and workspace to help with external kanban development.
@@ -2035,15 +2135,16 @@
             PROJECT_OID = meta.project.replace(numberYankingRegex, '');
         }
     </script>
-    <script type="text/javascript"
-            src="https://rally1.rallydev.com/slm/webservice/1.29/artifact.js?projectScopeUp=false&projectScopeDown=false&pagesize=1&jsonp=projectParser&includeMeta=true"></script>
 
     <script type="text/javascript">
         /*configure following if you plan to run the Kanban app externally
          rally.sdk.info.server = "https://community.rallydev.com/slm";*/
-
+        // var WORKSPACE_OID = "1234";
+        // var PROJECT_OID = "54678";
+        // var PROJECT_SCOPE_UP = false;
+        // var PROJECT_SCOPE_DOWN = true;
         /********************************/
-            //this gets the hang man's and overrides your defaults.
+
         var projectOid = '__PROJECT_OID__';
         projectOid = projectOid.indexOf("__") !== -1 ? PROJECT_OID : projectOid;
         var workspaceOid = '__WORKSPACE_OID__';
@@ -2054,7 +2155,6 @@
         projectScopeDown = projectScopeDown.indexOf("__") !== -1 ? PROJECT_SCOPE_DOWN : projectScopeDown;
 
         function onLoad() {
-
             var rallyDataSource = new rally.sdk.data.RallyDataSource(workspaceOid,
                     projectOid, projectScopeUp, projectScopeDown);
 
@@ -2063,30 +2163,21 @@
             rallyDataSource.projectScopeUp = projectScopeUp;
             rallyDataSource.projectScopeDown = projectScopeDown;
 
-            var config, kanbanBoard;
-
-            function configShow() {
-                if (!config) {
-                    config = new KanbanConfigPanel(rallyDataSource, kanbanBoard._redisplayBoard);
-                    config.display();
-                }
-                else {
-                    config.show();
-                }
-            }
-
-            rally.sdk.ui.AppHeader.addPageTool({
-                key:"showConfig",
-                label: "Settings...",
-                onClick: configShow
-            });
-            kanbanBoard = new KanbanBoard(rallyDataSource, configShow);
-            kanbanBoard.display(dojo.body());
-
+            var kanbanBoard;
+            rallyDataSource.find({
+                     key: 'WorkspaceConfiguration',
+                     type: 'WorkspaceConfiguration',
+                     fetch: 'DragDropRankingEnabled'
+                 }, function(results) {
+                     var isManualRankWorkspace = !results.WorkspaceConfiguration[0].DragDropRankingEnabled;
+                     kanbanBoard = new KanbanBoard(rallyDataSource, isManualRankWorkspace);
+                     kanbanBoard.display(dojo.body());
+                 }
+            );
         }
         rally.addOnLoad(onLoad);
-
     </script>
+
 </head>
 <body>
 <div style="display:none">

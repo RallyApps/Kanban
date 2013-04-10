@@ -4,9 +4,9 @@
 <head>
     <title>Kanban Board</title>
     <meta name="Name" content="App: Kanban Board"/>
-    <meta name="Version" content="2012.01.14"/>
+    <meta name="Version" content="2013.04.09"/>
     <meta name="Vendor" content="Rally Software"/>
-  <script type ="text/javascript" src="https://rally1.rallydev.com/apps/1.32/sdk.js?apiVersion=1.38&debug=true"></script>
+  <script type ="text/javascript" src="https://rally1.rallydev.com/apps/1.32/sdk.js?apiVersion=1.41&debug=true"></script>
   <script type="text/javascript" src="Kanban.js"></script>
 <script type="text/javascript" src="KanbanCardRenderer.js"></script>
 <script type="text/javascript" src="KanbanColumnRenderer.js"></script>
@@ -24,15 +24,16 @@
             PROJECT_OID = meta.project.replace(numberYankingRegex, '');
         }
     </script>
-    <script type="text/javascript"
-            src="https://rally1.rallydev.com/slm/webservice/1.29/artifact.js?projectScopeUp=false&projectScopeDown=false&pagesize=1&jsonp=projectParser&includeMeta=true"></script>
 
     <script type="text/javascript">
         /*configure following if you plan to run the Kanban app externally
          rally.sdk.info.server = "https://community.rallydev.com/slm";*/
-
+        // var WORKSPACE_OID = "1234";
+        // var PROJECT_OID = "54678";
+        // var PROJECT_SCOPE_UP = false;
+        // var PROJECT_SCOPE_DOWN = true;
         /********************************/
-            //this gets the hang man's and overrides your defaults.
+
         var projectOid = '__PROJECT_OID__';
         projectOid = projectOid.indexOf("__") !== -1 ? PROJECT_OID : projectOid;
         var workspaceOid = '__WORKSPACE_OID__';
@@ -43,7 +44,6 @@
         projectScopeDown = projectScopeDown.indexOf("__") !== -1 ? PROJECT_SCOPE_DOWN : projectScopeDown;
 
         function onLoad() {
-
             var rallyDataSource = new rally.sdk.data.RallyDataSource(workspaceOid,
                     projectOid, projectScopeUp, projectScopeDown);
 
@@ -52,30 +52,21 @@
             rallyDataSource.projectScopeUp = projectScopeUp;
             rallyDataSource.projectScopeDown = projectScopeDown;
 
-            var config, kanbanBoard;
-
-            function configShow() {
-                if (!config) {
-                    config = new KanbanConfigPanel(rallyDataSource, kanbanBoard._redisplayBoard);
-                    config.display();
-                }
-                else {
-                    config.show();
-                }
-            }
-
-            rally.sdk.ui.AppHeader.addPageTool({
-                key:"showConfig",
-                label: "Settings...",
-                onClick: configShow
-            });
-            kanbanBoard = new KanbanBoard(rallyDataSource, configShow);
-            kanbanBoard.display(dojo.body());
-
+            var kanbanBoard;
+            rallyDataSource.find({
+                     key: 'WorkspaceConfiguration',
+                     type: 'WorkspaceConfiguration',
+                     fetch: 'DragDropRankingEnabled'
+                 }, function(results) {
+                     var isManualRankWorkspace = !results.WorkspaceConfiguration[0].DragDropRankingEnabled;
+                     kanbanBoard = new KanbanBoard(rallyDataSource, isManualRankWorkspace);
+                     kanbanBoard.display(dojo.body());
+                 }
+            );
         }
         rally.addOnLoad(onLoad);
-
     </script>
+
 </head>
 <body>
 <div style="display:none">

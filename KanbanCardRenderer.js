@@ -1,3 +1,4 @@
+/** Copyright (c) 2013 Rally Software Development Corp. All rights reserved **/
 KanbanCardRenderer = function(column, item, options) {
     rally.sdk.ui.cardboard.BasicCardRenderer.call(this, column, item, options);
     var that = this;

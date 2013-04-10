@@ -1,3 +1,4 @@
+/** Copyright (c) 2013 Rally Software Development Corp. All rights reserved **/
 KanbanReport = function(config, rallyDataSource) {
     var that = this;
 

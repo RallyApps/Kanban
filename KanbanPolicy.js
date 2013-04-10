@@ -1,10 +1,5 @@
-/**
- Copyright (c) 2011  Rally Software Development Corp.  All rights reserved
- */
-
+/** Copyright (c) 2013 Rally Software Development Corp. All rights reserved **/
 KanbanPolicy = function(rallyDataSource, callback) {
-
-
     var that = this;
     var workspacePrefRef, projectPrefRef, fieldName, policyDesc;
 
