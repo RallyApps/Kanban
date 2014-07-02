@@ -1,6 +1,8 @@
 Rally Kanban
 ============
 
+## This app is deprecated. Please use the new Kanban board on our app-catalog [here](https://github.com/RallyApps/app-catalog/tree/master/src/apps/kanban).
+
 ![Title](https://raw.github.com/RallyApps/Kanban/master/screenshots/title-screenshot.png)
 
 ## Overview
